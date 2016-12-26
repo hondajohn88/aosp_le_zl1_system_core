@@ -25,7 +25,6 @@
 #include <sys/cdefs.h>
 #include <system/graphics.h>
 #include <unistd.h>
-#include <stdbool.h>
 
 #ifndef __UNUSED
 #define __UNUSED __attribute__((__unused__))
@@ -38,17 +37,8 @@ __BEGIN_DECLS
 
 /*****************************************************************************/
 
-#ifdef __cplusplus
-#define ANDROID_NATIVE_UNSIGNED_CAST(x) static_cast<unsigned int>(x)
-#else
-#define ANDROID_NATIVE_UNSIGNED_CAST(x) ((unsigned int)(x))
-#endif
-
 #define ANDROID_NATIVE_MAKE_CONSTANT(a,b,c,d) \
-    ((ANDROID_NATIVE_UNSIGNED_CAST(a) << 24) | \
-     (ANDROID_NATIVE_UNSIGNED_CAST(b) << 16) | \
-     (ANDROID_NATIVE_UNSIGNED_CAST(c) << 8) | \
-     (ANDROID_NATIVE_UNSIGNED_CAST(d)))
+    (((unsigned)(a)<<24)|((unsigned)(b)<<16)|((unsigned)(c)<<8)|(unsigned)(d))
 
 #define ANDROID_NATIVE_WINDOW_MAGIC \
     ANDROID_NATIVE_MAKE_CONSTANT('_','w','n','d')
@@ -287,16 +277,6 @@ enum {
      * age will be 0.
      */
     NATIVE_WINDOW_BUFFER_AGE = 13,
-
-    /*
-     * Returns the duration of the last dequeueBuffer call in microseconds
-     */
-    NATIVE_WINDOW_LAST_DEQUEUE_DURATION = 14,
-
-    /*
-     * Returns the duration of the last queueBuffer call in microseconds
-     */
-    NATIVE_WINDOW_LAST_QUEUE_DURATION = 15,
 };
 
 /* Valid operations for the (*perform)() hook.
@@ -331,9 +311,6 @@ enum {
     NATIVE_WINDOW_SET_SIDEBAND_STREAM       = 18,
     NATIVE_WINDOW_SET_BUFFERS_DATASPACE     = 19,
     NATIVE_WINDOW_SET_SURFACE_DAMAGE        = 20,   /* private */
-    NATIVE_WINDOW_SET_SHARED_BUFFER_MODE    = 21,
-    NATIVE_WINDOW_SET_AUTO_REFRESH          = 22,
-    NATIVE_WINDOW_GET_FRAME_TIMESTAMPS      = 23,
 };
 
 /* parameter for NATIVE_WINDOW_[API_][DIS]CONNECT */
@@ -374,8 +351,7 @@ enum {
     NATIVE_WINDOW_TRANSFORM_INVERSE_DISPLAY = 0x08
 };
 
-/* parameter for NATIVE_WINDOW_SET_SCALING_MODE
- * keep in sync with Surface.java in frameworks/base */
+/* parameter for NATIVE_WINDOW_SET_SCALING_MODE */
 enum {
     /* the window content is not updated (frozen) until a buffer of
      * the window size is received (enqueued)
@@ -972,41 +948,6 @@ static inline int native_window_set_surface_damage(
     return window->perform(window, NATIVE_WINDOW_SET_SURFACE_DAMAGE,
             rects, numRects);
 }
-
-/*
- * native_window_set_shared_buffer_mode(..., bool sharedBufferMode)
- * Enable/disable shared buffer mode
- */
-static inline int native_window_set_shared_buffer_mode(
-        struct ANativeWindow* window,
-        bool sharedBufferMode)
-{
-    return window->perform(window, NATIVE_WINDOW_SET_SHARED_BUFFER_MODE,
-            sharedBufferMode);
-}
-
-/*
- * native_window_set_auto_refresh(..., autoRefresh)
- * Enable/disable auto refresh when in shared buffer mode
- */
-static inline int native_window_set_auto_refresh(
-        struct ANativeWindow* window,
-        bool autoRefresh)
-{
-    return window->perform(window, NATIVE_WINDOW_SET_AUTO_REFRESH, autoRefresh);
-}
-
-static inline int native_window_get_frame_timestamps(
-        struct ANativeWindow* window, uint32_t framesAgo,
-        int64_t* outPostedTime, int64_t* outAcquireTime,
-        int64_t* outRefreshStartTime, int64_t* outGlCompositionDoneTime,
-        int64_t* outDisplayRetireTime, int64_t* outReleaseTime)
-{
-    return window->perform(window, NATIVE_WINDOW_GET_FRAME_TIMESTAMPS,
-            framesAgo, outPostedTime, outAcquireTime, outRefreshStartTime,
-            outGlCompositionDoneTime, outDisplayRetireTime, outReleaseTime);
-}
-
 
 __END_DECLS
 

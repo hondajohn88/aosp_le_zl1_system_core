@@ -44,7 +44,7 @@ void Printer::printFormatLine(const char* format, ...) {
 
     char* formattedString;
 
-#ifndef _WIN32
+#ifndef USE_MINGW
     if (vasprintf(&formattedString, format, arglist) < 0) { // returns -1 on error
         ALOGE("%s: Failed to format string", __FUNCTION__);
         return;
@@ -115,7 +115,7 @@ void FdPrinter::printLine(const char* string) {
         return;
     }
 
-#ifndef _WIN32
+#ifndef USE_MINGW
     dprintf(mFd, mFormatString, mPrefix, string);
 #endif
 }

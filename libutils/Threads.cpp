@@ -22,7 +22,6 @@
 #include <memory.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 #include <unistd.h>
 
 #if !defined(_WIN32)
@@ -45,7 +44,7 @@
 
 #include <cutils/sched_policy.h>
 
-#if defined(__ANDROID__)
+#ifdef HAVE_ANDROID_OS
 # define __android_unused
 #else
 # define __android_unused __attribute__((__unused__))
@@ -132,7 +131,7 @@ int androidCreateRawThreadEtc(android_thread_func_t entryFunction,
     pthread_attr_init(&attr);
     pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
 
-#if defined(__ANDROID__)  /* valgrind is rejecting RT-priority create reqs */
+#ifdef HAVE_ANDROID_OS  /* valgrind is rejecting RT-priority create reqs */
     if (threadPriority != PRIORITY_DEFAULT || threadName != NULL) {
         // Now that the pthread_t has a method to find the associated
         // android_thread_id_t (pid) from pthread_t, it would be possible to avoid
@@ -161,9 +160,9 @@ int androidCreateRawThreadEtc(android_thread_func_t entryFunction,
                     (android_pthread_entry)entryFunction, userData);
     pthread_attr_destroy(&attr);
     if (result != 0) {
-        ALOGE("androidCreateRawThreadEtc failed (entry=%p, res=%d, %s)\n"
+        ALOGE("androidCreateRawThreadEtc failed (entry=%p, res=%d, errno=%d)\n"
              "(android threadPriority=%d)",
-            entryFunction, result, strerror(errno), threadPriority);
+            entryFunction, result, errno, threadPriority);
         return 0;
     }
 
@@ -176,7 +175,7 @@ int androidCreateRawThreadEtc(android_thread_func_t entryFunction,
     return 1;
 }
 
-#if defined(__ANDROID__)
+#ifdef HAVE_ANDROID_OS
 static pthread_t android_thread_id_t_to_pthread(android_thread_id_t thread)
 {
     return (pthread_t) thread;
@@ -302,10 +301,12 @@ void androidSetCreateThreadFunc(android_create_thread_fn func)
     gCreateThreadFn = func;
 }
 
-#if defined(__ANDROID__)
+#ifdef HAVE_ANDROID_OS
 int androidSetThreadPriority(pid_t tid, int pri)
 {
     int rc = 0;
+
+#if !defined(_WIN32)
     int lasterr = 0;
 
     if (pri >= ANDROID_PRIORITY_BACKGROUND) {
@@ -323,12 +324,17 @@ int androidSetThreadPriority(pid_t tid, int pri)
     } else {
         errno = lasterr;
     }
+#endif
 
     return rc;
 }
 
 int androidGetThreadPriority(pid_t tid) {
+#if !defined(_WIN32)
     return getpriority(PRIO_PROCESS, tid);
+#else
+    return ANDROID_PRIORITY_NORMAL;
+#endif
 }
 
 #endif
@@ -651,7 +657,7 @@ Thread::Thread(bool canCallJava)
         mLock("Thread::mLock"),
         mStatus(NO_ERROR),
         mExitPending(false), mRunning(false)
-#if defined(__ANDROID__)
+#ifdef HAVE_ANDROID_OS
         , mTid(-1)
 #endif
 {
@@ -668,8 +674,6 @@ status_t Thread::readyToRun()
 
 status_t Thread::run(const char* name, int32_t priority, size_t stack)
 {
-    LOG_ALWAYS_FATAL_IF(name == nullptr, "thread name not provided to Thread::run");
-
     Mutex::Autolock _l(mLock);
 
     if (mRunning) {
@@ -723,7 +727,7 @@ int Thread::_threadLoop(void* user)
     wp<Thread> weak(strong);
     self->mHoldSelf.clear();
 
-#if defined(__ANDROID__)
+#ifdef HAVE_ANDROID_OS
     // this is very useful for debugging with gdb
     self->mTid = gettid();
 #endif
@@ -834,7 +838,7 @@ bool Thread::isRunning() const {
     return mRunning;
 }
 
-#if defined(__ANDROID__)
+#ifdef HAVE_ANDROID_OS
 pid_t Thread::getTid() const
 {
     // mTid is not defined until the child initializes it, and the caller may need it earlier

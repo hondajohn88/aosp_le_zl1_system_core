@@ -38,7 +38,7 @@ static void parse_line_device(struct parse_state *state, int nargs, char **args)
 #include "ueventd_keywords.h"
 
 #define KEYWORD(symbol, flags, nargs) \
-    [ K_##symbol ] = { #symbol, (nargs) + 1, flags, },
+    [ K_##symbol ] = { #symbol, nargs + 1, flags, },
 
 static struct {
     const char *name;
@@ -233,6 +233,7 @@ int ueventd_parse_config_file(const char *fn)
 
     data.push_back('\n'); // TODO: fix parse_config.
     parse_config(fn, data);
+    dump_parser_state();
     return 0;
 }
 

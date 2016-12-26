@@ -16,23 +16,23 @@
 
 #define LOG_TAG "DEBUG"
 
-#include <errno.h>
-#include <dirent.h>
-#include <limits.h>
 #include <stddef.h>
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/ptrace.h>
-#include <sys/types.h>
+#include <stdio.h>
 #include <time.h>
+#include <errno.h>
+#include <limits.h>
+#include <dirent.h>
 #include <unistd.h>
+#include <sys/types.h>
+#include <sys/ptrace.h>
 
 #include <memory>
-#include <string>
 
-#include <android/log.h>
 #include <backtrace/Backtrace.h>
+
+#include <log/log.h>
 
 #include "backtrace.h"
 
@@ -67,7 +67,8 @@ static void dump_process_footer(log_t* log, pid_t pid) {
   _LOG(log, logtype::BACKTRACE, "\n----- end %d -----\n", pid);
 }
 
-static void dump_thread(log_t* log, BacktraceMap* map, pid_t pid, pid_t tid) {
+static void dump_thread(log_t* log, pid_t pid, pid_t tid, bool attached,
+                        bool* detach_failed, int* total_sleep_time_usec) {
   char path[PATH_MAX];
   char threadnamebuf[1024];
   char* threadname = NULL;
@@ -87,26 +88,56 @@ static void dump_thread(log_t* log, BacktraceMap* map, pid_t pid, pid_t tid) {
 
   _LOG(log, logtype::BACKTRACE, "\n\"%s\" sysTid=%d\n", threadname ? threadname : "<unknown>", tid);
 
-  std::unique_ptr<Backtrace> backtrace(Backtrace::Create(pid, tid, map));
+  if (!attached && !ptrace_attach_thread(pid, tid)) {
+    _LOG(log, logtype::BACKTRACE, "Could not attach to thread: %s\n", strerror(errno));
+    return;
+  }
+
+  if (!attached && wait_for_sigstop(tid, total_sleep_time_usec, detach_failed) == -1) {
+    return;
+  }
+
+  std::unique_ptr<Backtrace> backtrace(Backtrace::Create(tid, BACKTRACE_CURRENT_THREAD));
   if (backtrace->Unwind(0)) {
     dump_backtrace_to_log(backtrace.get(), log, "  ");
   } else {
-    ALOGE("Unwind failed: tid = %d: %s", tid,
-          backtrace->GetErrorString(backtrace->GetError()).c_str());
+    ALOGE("Unwind failed: tid = %d", tid);
+  }
+
+  if (!attached && ptrace(PTRACE_DETACH, tid, 0, 0) != 0) {
+    _LOG(log, logtype::ERROR, "ptrace detach from %d failed: %s\n", tid, strerror(errno));
+    *detach_failed = true;
   }
 }
 
-void dump_backtrace(int fd, BacktraceMap* map, pid_t pid, pid_t tid,
-                    const std::set<pid_t>& siblings, std::string* amfd_data) {
+void dump_backtrace(int fd, int amfd, pid_t pid, pid_t tid, bool* detach_failed,
+                    int* total_sleep_time_usec) {
   log_t log;
   log.tfd = fd;
-  log.amfd_data = amfd_data;
+  log.amfd = amfd;
 
   dump_process_header(&log, pid);
-  dump_thread(&log, map, pid, tid);
+  dump_thread(&log, pid, tid, true, detach_failed, total_sleep_time_usec);
 
-  for (pid_t sibling : siblings) {
-    dump_thread(&log, map, pid, sibling);
+  char task_path[64];
+  snprintf(task_path, sizeof(task_path), "/proc/%d/task", pid);
+  DIR* d = opendir(task_path);
+  if (d != NULL) {
+    struct dirent* de = NULL;
+    while ((de = readdir(d)) != NULL) {
+      if (!strcmp(de->d_name, ".") || !strcmp(de->d_name, "..")) {
+        continue;
+      }
+
+      char* end;
+      pid_t new_tid = strtoul(de->d_name, &end, 10);
+      if (*end || new_tid == tid) {
+        continue;
+      }
+
+      dump_thread(&log, pid, new_tid, false, detach_failed, total_sleep_time_usec);
+    }
+    closedir(d);
   }
 
   dump_process_footer(&log, pid);

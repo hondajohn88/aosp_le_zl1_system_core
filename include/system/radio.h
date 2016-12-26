@@ -94,7 +94,6 @@ typedef struct radio_hal_fm_band_config {
     radio_rds_t         rds;        /* RDS variants supported */
     bool                ta;         /* Traffic Announcement supported */
     bool                af;         /* Alternate Frequency supported */
-    bool                ea;         /* Emergency announcements supported */
 } radio_hal_fm_band_config_t;
 
 /* Additional attributes for an AM band configuration */
@@ -185,7 +184,6 @@ enum {
     RADIO_EVENT_METADATA    = 4,  /* New meta data received */
     RADIO_EVENT_TA          = 5,  /* Traffic announcement start or stop */
     RADIO_EVENT_AF_SWITCH   = 6,  /* Switch to Alternate Frequency */
-    RADIO_EVENT_EA          = 7,  /* Emergency announcement start or stop */
     // begin framework only events
     RADIO_EVENT_CONTROL     = 100, /* loss/gain of tuner control */
     RADIO_EVENT_SERVER_DIED = 101, /* radio service died */
@@ -197,8 +195,7 @@ typedef struct radio_hal_event {
     radio_event_type_t  type;       /* event type */
     int                 status;     /* used by RADIO_EVENT_CONFIG, RADIO_EVENT_TUNED */
     union {
-        /* RADIO_EVENT_ANTENNA, RADIO_EVENT_TA, RADIO_EVENT_EA */
-        bool                    on;
+        bool                    on;     /* RADIO_EVENT_ANTENNA, RADIO_EVENT_TA */
         radio_hal_band_config_t config; /* RADIO_EVENT_CONFIG */
         radio_program_info_t    info;   /* RADIO_EVENT_TUNED, RADIO_EVENT_AF_SWITCH */
         radio_metadata_t        *metadata; /* RADIO_EVENT_METADATA */
@@ -218,8 +215,7 @@ typedef struct radio_event {
 } radio_event_t;
 
 
-static inline
-radio_rds_t radio_rds_for_region(bool rds, radio_region_t region) {
+static radio_rds_t radio_rds_for_region(bool rds, radio_region_t region) {
     if (!rds)
         return RADIO_RDS_NONE;
     switch(region) {
@@ -235,8 +231,7 @@ radio_rds_t radio_rds_for_region(bool rds, radio_region_t region) {
     }
 }
 
-static inline
-radio_deemphasis_t radio_demephasis_for_region(radio_region_t region) {
+static radio_deemphasis_t radio_demephasis_for_region(radio_region_t region) {
     switch(region) {
         case RADIO_REGION_KOREA:
         case RADIO_REGION_ITU_2:

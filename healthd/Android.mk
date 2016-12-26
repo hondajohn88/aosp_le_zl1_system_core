@@ -6,67 +6,22 @@ include $(CLEAR_VARS)
 LOCAL_SRC_FILES := healthd_board_default.cpp
 LOCAL_MODULE := libhealthd.default
 LOCAL_CFLAGS := -Werror
-LOCAL_C_INCLUDES := $(LOCAL_PATH)/include
-LOCAL_EXPORT_C_INCLUDE_DIRS := $(LOCAL_PATH)/include
-LOCAL_STATIC_LIBRARIES := libbinder
-LOCAL_EXPORT_STATIC_LIBRARY_HEADERS := libbinder
 include $(BUILD_STATIC_LIBRARY)
 
 include $(CLEAR_VARS)
-LOCAL_SRC_FILES := BatteryMonitor.cpp
-LOCAL_MODULE := libbatterymonitor
-LOCAL_C_INCLUDES := $(LOCAL_PATH)/include
-LOCAL_EXPORT_C_INCLUDE_DIRS := $(LOCAL_PATH)/include
-LOCAL_STATIC_LIBRARIES := libutils libbase libbinder
+LOCAL_SRC_FILES := healthd_board_msm.cpp
+LOCAL_MODULE := libhealthd.qcom
+LOCAL_CFLAGS := -Werror
 include $(BUILD_STATIC_LIBRARY)
 
 include $(CLEAR_VARS)
-LOCAL_SRC_FILES := \
-    healthd_mode_android.cpp \
-    healthd_mode_charger.cpp \
-    AnimationParser.cpp \
-    BatteryPropertiesRegistrar.cpp \
-
-LOCAL_MODULE := libhealthd_internal
-LOCAL_C_INCLUDES := bootable/recovery
-LOCAL_EXPORT_C_INCLUDE_DIRS := \
-    $(LOCAL_PATH) \
-    $(LOCAL_PATH)/include \
-
-LOCAL_STATIC_LIBRARIES := \
-    libbatterymonitor \
-    libbatteryservice \
-    libbinder \
-    libminui \
-    libpng \
-    libz \
-    libutils \
-    libbase \
-    libcutils \
-    liblog \
-    libm \
-    libc \
-
-include $(BUILD_STATIC_LIBRARY)
-
-
-include $(CLEAR_VARS)
-
-ifeq ($(strip $(BOARD_CHARGER_NO_UI)),true)
-LOCAL_CHARGER_NO_UI := true
-endif
-ifdef BRILLO
-LOCAL_CHARGER_NO_UI := true
-endif
 
 LOCAL_SRC_FILES := \
 	healthd.cpp \
 	healthd_mode_android.cpp \
-	BatteryPropertiesRegistrar.cpp \
-
-ifneq ($(strip $(LOCAL_CHARGER_NO_UI)),true)
-LOCAL_SRC_FILES += healthd_mode_charger.cpp
-endif
+	healthd_mode_charger.cpp \
+	BatteryMonitor.cpp \
+	BatteryPropertiesRegistrar.cpp
 
 LOCAL_MODULE := healthd
 LOCAL_MODULE_TAGS := optional
@@ -84,34 +39,9 @@ ifeq ($(strip $(BOARD_CHARGER_ENABLE_SUSPEND)),true)
 LOCAL_CFLAGS += -DCHARGER_ENABLE_SUSPEND
 endif
 
-ifeq ($(strip $(LOCAL_CHARGER_NO_UI)),true)
-LOCAL_CFLAGS += -DCHARGER_NO_UI
-endif
+LOCAL_C_INCLUDES := bootable/recovery
 
-LOCAL_C_INCLUDES := bootable/recovery $(LOCAL_PATH)/include
-
-LOCAL_STATIC_LIBRARIES := \
-    libhealthd_internal \
-    libbatterymonitor \
-    libbatteryservice \
-    libbinder \
-    libbase \
-
-ifneq ($(strip $(LOCAL_CHARGER_NO_UI)),true)
-LOCAL_STATIC_LIBRARIES += \
-   libminui \
-   libpng \
-   libz \
-
-endif
-
-
-LOCAL_STATIC_LIBRARIES += \
-    libutils \
-    libcutils \
-    liblog \
-    libm \
-    libc \
+LOCAL_STATIC_LIBRARIES := libbatteryservice libbinder libminui libpng libz libutils libstdc++ libcutils liblog libm libc
 
 ifeq ($(strip $(BOARD_CHARGER_ENABLE_SUSPEND)),true)
 LOCAL_STATIC_LIBRARIES += libsuspend
@@ -126,10 +56,9 @@ LOCAL_POST_INSTALL_CMD := $(hide) mkdir -p $(TARGET_ROOT_OUT) \
 include $(BUILD_EXECUTABLE)
 
 
-ifneq ($(strip $(LOCAL_CHARGER_NO_UI)),true)
 define _add-charger-image
 include $$(CLEAR_VARS)
-LOCAL_MODULE := system_core_charger_res_images_$(notdir $(1))
+LOCAL_MODULE := system_core_charger_$(notdir $(1))
 LOCAL_MODULE_STEM := $(notdir $(1))
 _img_modules += $$(LOCAL_MODULE)
 LOCAL_SRC_FILES := $1
@@ -152,4 +81,3 @@ include $(BUILD_PHONY_PACKAGE)
 
 _add-charger-image :=
 _img_modules :=
-endif # LOCAL_CHARGER_NO_UI

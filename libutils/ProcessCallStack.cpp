@@ -17,11 +17,9 @@
 #define LOG_TAG "ProcessCallStack"
 // #define LOG_NDEBUG 0
 
-#include <dirent.h>
-#include <errno.h>
-#include <stdio.h>
 #include <string.h>
-#include <memory>
+#include <stdio.h>
+#include <dirent.h>
 
 #include <utils/Log.h>
 #include <utils/Errors.h>
@@ -131,10 +129,14 @@ void ProcessCallStack::clear() {
 }
 
 void ProcessCallStack::update() {
-    std::unique_ptr<DIR, decltype(&closedir)> dp(opendir(PATH_SELF_TASK), closedir);
+    DIR *dp;
+    struct dirent *ep;
+    struct dirent entry;
+
+    dp = opendir(PATH_SELF_TASK);
     if (dp == NULL) {
-        ALOGE("%s: Failed to update the process's call stacks: %s",
-              __FUNCTION__, strerror(errno));
+        ALOGE("%s: Failed to update the process's call stacks (errno = %d, '%s')",
+              __FUNCTION__, errno, strerror(errno));
         return;
     }
 
@@ -143,6 +145,7 @@ void ProcessCallStack::update() {
     clear();
 
     // Get current time.
+#ifndef USE_MINGW
     {
         time_t t = time(NULL);
         struct tm tm;
@@ -155,8 +158,8 @@ void ProcessCallStack::update() {
      * Each tid is a directory inside of /proc/self/task
      * - Read every file in directory => get every tid
      */
-    dirent* ep;
-    while ((ep = readdir(dp.get())) != NULL) {
+    int code;
+    while ((code = readdir_r(dp, &entry, &ep)) == 0 && ep != NULL) {
         pid_t tid = -1;
         sscanf(ep->d_name, "%d", &tid);
 
@@ -169,8 +172,8 @@ void ProcessCallStack::update() {
 
         ssize_t idx = mThreadMap.add(tid, ThreadInfo());
         if (idx < 0) { // returns negative error value on error
-            ALOGE("%s: Failed to add new ThreadInfo: %s",
-                  __FUNCTION__, strerror(-idx));
+            ALOGE("%s: Failed to add new ThreadInfo (errno = %zd, '%s')",
+                  __FUNCTION__, idx, strerror(-idx));
             continue;
         }
 
@@ -191,6 +194,13 @@ void ProcessCallStack::update() {
         ALOGV("%s: Got call stack for tid %d (size %zu)",
               __FUNCTION__, tid, threadInfo.callStack.size());
     }
+    if (code != 0) { // returns positive error value on error
+        ALOGE("%s: Failed to readdir from %s (errno = %d, '%s')",
+              __FUNCTION__, PATH_SELF_TASK, -code, strerror(code));
+    }
+#endif
+
+    closedir(dp);
 }
 
 void ProcessCallStack::log(const char* logtag, android_LogPriority priority,

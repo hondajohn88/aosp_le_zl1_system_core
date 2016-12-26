@@ -49,7 +49,7 @@ TEST(logcat, sorted_order) {
             }
         }
 
-        explicit timestamp(const char *buffer)
+        timestamp(const char *buffer)
         {
             init(buffer);
         }

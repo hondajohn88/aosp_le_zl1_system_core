@@ -13,17 +13,16 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+#include <errno.h>
+#include <string.h>
+#include <stdlib.h>
 
 #define LOG_TAG "FrameworkListener"
 
-#include <errno.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
+#include <cutils/log.h>
 
-#include <log/log.h>
-#include <sysutils/FrameworkCommand.h>
 #include <sysutils/FrameworkListener.h>
+#include <sysutils/FrameworkCommand.h>
 #include <sysutils/SocketClient.h>
 
 static const int CMD_BUF_SIZE = 1024;

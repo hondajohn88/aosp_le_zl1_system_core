@@ -24,26 +24,12 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <android/log.h>
 #include <cutils/hashmap.h>
 #include <cutils/memory.h>
 #include <cutils/str_parms.h>
+#include <log/log.h>
 
 #define UNUSED __attribute__((unused))
-
-/* When an object is allocated but not freed in a function,
- * because its ownership is released to other object like a hashmap,
- * call RELEASE_OWNERSHIP to tell the clang analyzer and avoid
- * false warnings about potential memory leak.
- * For now, a "temporary" assignment to global variables
- * is enough to confuse the clang static analyzer.
- */
-#ifdef __clang_analyzer__
-static void *released_pointer;
-#define RELEASE_OWNERSHIP(x) { released_pointer = x; released_pointer = 0; }
-#else
-#define RELEASE_OWNERSHIP(x)
-#endif
 
 struct str_parms {
     Hashmap *map;
@@ -56,9 +42,6 @@ static bool str_eq(void *key_a, void *key_b)
 }
 
 /* use djb hash unless we find it inadequate */
-#ifdef __clang__
-__attribute__((no_sanitize("integer")))
-#endif
 static int str_hash_fn(void *str)
 {
     uint32_t hash = 5381;
@@ -184,12 +167,9 @@ struct str_parms *str_parms_create_str(const char *_string)
 
         /* if we replaced a value, free it */
         old_val = hashmapPut(str_parms->map, key, value);
-        RELEASE_OWNERSHIP(value);
         if (old_val) {
             free(old_val);
             free(key);
-        } else {
-            RELEASE_OWNERSHIP(key);
         }
 
         items++;
@@ -239,13 +219,10 @@ int str_parms_add_str(struct str_parms *str_parms, const char *key,
             goto clean_up;
         }
         // For new keys, hashmap takes ownership of tmp_key and tmp_val.
-        RELEASE_OWNERSHIP(tmp_key);
-        RELEASE_OWNERSHIP(tmp_val);
         tmp_key = tmp_val = NULL;
     } else {
         // For existing keys, hashmap takes ownership of tmp_val.
         // (It also gives up ownership of old_val.)
-        RELEASE_OWNERSHIP(tmp_val);
         tmp_val = NULL;
     }
 

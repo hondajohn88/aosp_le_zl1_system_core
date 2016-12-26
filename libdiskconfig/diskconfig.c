@@ -20,18 +20,20 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <inttypes.h>
-#include <linux/fs.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 #include <sys/ioctl.h>
 #include <sys/stat.h>
-#include <unistd.h>
 
-#include <android/log.h>
+#include <linux/fs.h>
+
 #include <cutils/config_utils.h>
+#include <log/log.h>
 
 #include <diskconfig/diskconfig.h>
+
 
 static int
 parse_len(const char *str, uint64_t *plen)

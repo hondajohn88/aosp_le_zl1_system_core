@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "android-base/stringprintf.h"
+#include "base/stringprintf.h"
 
 #include <stdio.h>
 

@@ -55,8 +55,7 @@ extern size_t strnlen16to8(const char16_t* utf16Str, size_t len)
     /* Fast path for the usual case where 3*len is < SIZE_MAX-1.
      */
     if (len < (SIZE_MAX-1)/3) {
-        while (len != 0) {
-            len--;
+        while (len--) {
             unsigned int uic = *utf16Str++;
 
             if (uic > 0x07ff)
@@ -70,8 +69,7 @@ extern size_t strnlen16to8(const char16_t* utf16Str, size_t len)
     }
 
     /* The slower but paranoid version */
-    while (len != 0) {
-        len--;
+    while (len--) {
         unsigned int  uic     = *utf16Str++;
         size_t        utf8Cur = utf8Len;
 
@@ -114,8 +112,7 @@ extern char* strncpy16to8(char* utf8Str, const char16_t* utf16Str, size_t len)
      * strnlen16to8() properly or at a minimum checked the result of
      * its malloc(SIZE_MAX) in case of overflow.
      */
-    while (len != 0) {
-        len--;
+    while (len--) {
         unsigned int uic = *utf16Str++;
 
         if (uic > 0x07ff) {

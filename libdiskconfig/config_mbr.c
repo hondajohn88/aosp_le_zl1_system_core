@@ -16,14 +16,15 @@
  */
 
 #define LOG_TAG "config_mbr"
-
 #include <stdint.h>
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdio.h>
 
-#include <android/log.h>
+#include <cutils/log.h>
+
 #include <diskconfig/diskconfig.h>
+
 
 /* start and len are in LBA units */
 static void

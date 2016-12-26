@@ -29,9 +29,16 @@
 #ifndef _USB_H_
 #define _USB_H_
 
-#include "transport.h"
+#if defined(__cplusplus)
+extern "C" {
+#endif
 
-struct usb_ifc_info {
+typedef struct usb_handle usb_handle;
+
+typedef struct usb_ifc_info usb_ifc_info;
+
+struct usb_ifc_info
+{
         /* from device descriptor */
     unsigned short dev_vendor;
     unsigned short dev_product;
@@ -55,6 +62,14 @@ struct usb_ifc_info {
 
 typedef int (*ifc_match_func)(usb_ifc_info *ifc);
 
-Transport* usb_open(ifc_match_func callback);
+usb_handle *usb_open(ifc_match_func callback);
+int usb_close(usb_handle *h);
+int usb_read(usb_handle *h, void *_data, int len);
+int usb_write(usb_handle *h, const void *_data, int len);
+int usb_wait_for_disconnect(usb_handle *h);
+
+#if defined(__cplusplus)
+}
+#endif
 
 #endif

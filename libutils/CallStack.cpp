@@ -16,12 +16,11 @@
 
 #define LOG_TAG "CallStack"
 
-#include <memory>
-
 #include <utils/CallStack.h>
 #include <utils/Printer.h>
 #include <utils/Errors.h>
 #include <utils/Log.h>
+#include <UniquePtr.h>
 
 #include <backtrace/Backtrace.h>
 
@@ -41,7 +40,7 @@ CallStack::~CallStack() {
 void CallStack::update(int32_t ignoreDepth, pid_t tid) {
     mFrameLines.clear();
 
-    std::unique_ptr<Backtrace> backtrace(Backtrace::Create(BACKTRACE_CURRENT_PROCESS, tid));
+    UniquePtr<Backtrace> backtrace(Backtrace::Create(BACKTRACE_CURRENT_PROCESS, tid));
     if (!backtrace->Unwind(ignoreDepth)) {
         ALOGW("%s: Failed to unwind callstack.", __FUNCTION__);
     }

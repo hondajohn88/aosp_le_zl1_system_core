@@ -15,16 +15,18 @@
 ** limitations under the License.
 */
 
-#define LOG_TAG "CodeCache"
 
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <sys/mman.h>
 #include <unistd.h>
+#include <sys/mman.h>
 
-#include <android/log.h>
 #include <cutils/ashmem.h>
+#include <cutils/atomic.h>
+#define LOG_TAG "CodeCache"
+#include <cutils/log.h>
+
 
 #include "CodeCache.h"
 
@@ -61,7 +63,7 @@ static void heap_error(const char* msg, const char* function, void* p);
 #define USAGE_ERROR_ACTION(m,p) \
     heap_error("ARGUMENT IS INVALID HEAP ADDRESS", __FUNCTION__, p)
 
-#include "../../../../external/dlmalloc/malloc.c"
+#include "../../../../bionic/libc/upstream-dlmalloc/malloc.c"
 
 static void heap_error(const char* msg, const char* function, void* p) {
     ALOG(LOG_FATAL, LOG_TAG, "@@@ ABORTING: CODE FLINGER: %s IN %s addr=%p",
@@ -99,7 +101,7 @@ static mspace getMspace()
 }
 
 Assembly::Assembly(size_t size)
-    : mCount(0), mSize(0)
+    : mCount(1), mSize(0)
 {
     mBase = (uint32_t*)mspace_malloc(getMspace(), size);
     LOG_ALWAYS_FATAL_IF(mBase == NULL,
@@ -115,12 +117,12 @@ Assembly::~Assembly()
 
 void Assembly::incStrong(const void*) const
 {
-    mCount.fetch_add(1, std::memory_order_relaxed);
+    android_atomic_inc(&mCount);
 }
 
 void Assembly::decStrong(const void*) const
 {
-    if (mCount.fetch_sub(1, std::memory_order_acq_rel) == 1) {
+    if (android_atomic_dec(&mCount) == 1) {
         delete this;
     }
 }

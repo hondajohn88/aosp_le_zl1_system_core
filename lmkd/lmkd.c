@@ -18,7 +18,6 @@
 
 #include <arpa/inet.h>
 #include <errno.h>
-#include <sched.h>
 #include <signal.h>
 #include <stdlib.h>
 #include <string.h>
@@ -31,8 +30,8 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-#include <android/log.h>
 #include <cutils/sockets.h>
+#include <log/log.h>
 #include <processgroup/processgroup.h>
 
 #ifndef __unused
@@ -40,7 +39,7 @@
 #endif
 
 #define MEMCG_SYSFS_PATH "/dev/memcg/"
-#define MEMPRESSURE_WATCH_LEVEL "low"
+#define MEMPRESSURE_WATCH_LEVEL "medium"
 #define ZONEINFO_PATH "/proc/zoneinfo"
 #define LINE_MAX 128
 
@@ -78,7 +77,12 @@ static int ctrl_dfd_reopened; /* did we reopen ctrl conn on this loop? */
 static int epollfd;
 static int maxevents;
 
-/* OOM score values used by both kernel and framework */
+#define OOM_DISABLE (-17)
+/* inclusive */
+#define OOM_ADJUST_MIN (-16)
+#define OOM_ADJUST_MAX 15
+
+/* kernel OOM score values */
 #define OOM_SCORE_ADJ_MIN       (-1000)
 #define OOM_SCORE_ADJ_MAX       1000
 
@@ -110,8 +114,8 @@ struct proc {
 static struct proc *pidhash[PIDHASH_SZ];
 #define pid_hashfn(x) ((((x) >> 8) ^ (x)) & (PIDHASH_SZ - 1))
 
-#define ADJTOSLOT(adj) ((adj) + -OOM_SCORE_ADJ_MIN)
-static struct adjslot_list procadjslot_list[ADJTOSLOT(OOM_SCORE_ADJ_MAX) + 1];
+#define ADJTOSLOT(adj) (adj + -OOM_ADJUST_MIN)
+static struct adjslot_list procadjslot_list[ADJTOSLOT(OOM_ADJUST_MAX) + 1];
 
 /*
  * Wait 1-2 seconds for the death report of a killed process prior to
@@ -142,6 +146,14 @@ static ssize_t read_all(int fd, char *buf, size_t max_len)
     }
 
     return ret;
+}
+
+static int lowmem_oom_adj_to_oom_score_adj(int oom_adj)
+{
+    if (oom_adj == OOM_ADJUST_MAX)
+        return OOM_SCORE_ADJ_MAX;
+    else
+        return (oom_adj * OOM_SCORE_ADJ_MAX) / -OOM_DISABLE;
 }
 
 static struct proc *pid_lookup(int pid) {
@@ -218,7 +230,7 @@ static int pid_remove(int pid) {
 }
 
 static void writefilestring(char *path, char *s) {
-    int fd = open(path, O_WRONLY | O_CLOEXEC);
+    int fd = open(path, O_WRONLY);
     int len = strlen(s);
     int ret;
 
@@ -242,13 +254,13 @@ static void cmd_procprio(int pid, int uid, int oomadj) {
     char path[80];
     char val[20];
 
-    if (oomadj < OOM_SCORE_ADJ_MIN || oomadj > OOM_SCORE_ADJ_MAX) {
+    if (oomadj < OOM_DISABLE || oomadj > OOM_ADJUST_MAX) {
         ALOGE("Invalid PROCPRIO oomadj argument %d", oomadj);
         return;
     }
 
     snprintf(path, sizeof(path), "/proc/%d/oom_score_adj", pid);
-    snprintf(val, sizeof(val), "%d", oomadj);
+    snprintf(val, sizeof(val), "%d", lowmem_oom_adj_to_oom_score_adj(oomadj));
     writefilestring(path, val);
 
     if (use_inkernel_interface)
@@ -398,6 +410,8 @@ static void ctrl_data_handler(uint32_t events) {
 }
 
 static void ctrl_connect_handler(uint32_t events __unused) {
+    struct sockaddr addr;
+    socklen_t alen;
     struct epoll_event epev;
 
     if (ctrl_dfd >= 0) {
@@ -405,7 +419,8 @@ static void ctrl_connect_handler(uint32_t events __unused) {
         ctrl_dfd_reopened = 1;
     }
 
-    ctrl_dfd = accept(ctrl_lfd, NULL, NULL);
+    alen = sizeof(addr);
+    ctrl_dfd = accept(ctrl_lfd, &addr, &alen);
 
     if (ctrl_dfd < 0) {
         ALOGE("lmkd control socket accept failed; errno=%d", errno);
@@ -471,7 +486,7 @@ static int zoneinfo_parse(struct sysmeminfo *mip) {
 
     memset(mip, 0, sizeof(struct sysmeminfo));
 
-    fd = open(ZONEINFO_PATH, O_RDONLY | O_CLOEXEC);
+    fd = open(ZONEINFO_PATH, O_RDONLY);
     if (fd == -1) {
         ALOGE("%s open: errno=%d", ZONEINFO_PATH, errno);
         return -1;
@@ -502,7 +517,7 @@ static int proc_get_size(int pid) {
     ssize_t ret;
 
     snprintf(path, PATH_MAX, "/proc/%d/statm", pid);
-    fd = open(path, O_RDONLY | O_CLOEXEC);
+    fd = open(path, O_RDONLY);
     if (fd == -1)
         return -1;
 
@@ -525,7 +540,7 @@ static char *proc_get_name(int pid) {
     ssize_t ret;
 
     snprintf(path, PATH_MAX, "/proc/%d/cmdline", pid);
-    fd = open(path, O_RDONLY | O_CLOEXEC);
+    fd = open(path, O_RDONLY);
     if (fd == -1)
         return NULL;
     ret = read_all(fd, line, sizeof(line) - 1);
@@ -592,7 +607,7 @@ static int kill_one_process(struct proc *procp, int other_free, int other_file,
 static int find_and_kill_process(int other_free, int other_file, bool first)
 {
     int i;
-    int min_score_adj = OOM_SCORE_ADJ_MAX + 1;
+    int min_score_adj = OOM_ADJUST_MAX + 1;
     int minfree = 0;
     int killed_size = 0;
 
@@ -604,10 +619,10 @@ static int find_and_kill_process(int other_free, int other_file, bool first)
         }
     }
 
-    if (min_score_adj == OOM_SCORE_ADJ_MAX + 1)
+    if (min_score_adj == OOM_ADJUST_MAX + 1)
         return 0;
 
-    for (i = OOM_SCORE_ADJ_MAX; i >= min_score_adj; i--) {
+    for (i = OOM_ADJUST_MAX; i >= min_score_adj; i--) {
         struct proc *procp;
 
 retry:
@@ -670,19 +685,19 @@ static int init_mp(char *levelstr, void *event_handler)
     struct epoll_event epev;
     int ret;
 
-    mpfd = open(MEMCG_SYSFS_PATH "memory.pressure_level", O_RDONLY | O_CLOEXEC);
+    mpfd = open(MEMCG_SYSFS_PATH "memory.pressure_level", O_RDONLY);
     if (mpfd < 0) {
         ALOGI("No kernel memory.pressure_level support (errno=%d)", errno);
         goto err_open_mpfd;
     }
 
-    evctlfd = open(MEMCG_SYSFS_PATH "cgroup.event_control", O_WRONLY | O_CLOEXEC);
+    evctlfd = open(MEMCG_SYSFS_PATH "cgroup.event_control", O_WRONLY);
     if (evctlfd < 0) {
         ALOGI("No kernel memory cgroup event control (errno=%d)", errno);
         goto err_open_evctlfd;
     }
 
-    evfd = eventfd(0, EFD_NONBLOCK | EFD_CLOEXEC);
+    evfd = eventfd(0, EFD_NONBLOCK);
     if (evfd < 0) {
         ALOGE("eventfd failed for level %s; errno=%d", levelstr, errno);
         goto err_eventfd;
@@ -768,7 +783,7 @@ static int init(void) {
             ALOGE("Kernel does not support memory pressure events or in-kernel low memory killer");
     }
 
-    for (i = 0; i <= ADJTOSLOT(OOM_SCORE_ADJ_MAX); i++) {
+    for (i = 0; i <= ADJTOSLOT(OOM_ADJUST_MAX); i++) {
         procadjslot_list[i].next = &procadjslot_list[i];
         procadjslot_list[i].prev = &procadjslot_list[i];
     }

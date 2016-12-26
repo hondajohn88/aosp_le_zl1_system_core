@@ -14,14 +14,14 @@
  * limitations under the License.
  */
 
-#define LOG_TAG "sharedbuffer"
-
+#define __STDC_LIMIT_MACROS
+#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 
-#include <android/log.h>
-
-#include "SharedBuffer.h"
+#include <log/log.h>
+#include <utils/SharedBuffer.h>
+#include <utils/Atomic.h>
 
 // ---------------------------------------------------------------------------
 
@@ -36,19 +36,18 @@ SharedBuffer* SharedBuffer::alloc(size_t size)
 
     SharedBuffer* sb = static_cast<SharedBuffer *>(malloc(sizeof(SharedBuffer) + size));
     if (sb) {
-        // Should be std::atomic_init(&sb->mRefs, 1);
-        // But that generates a warning with some compilers.
-        // The following is OK on Android-supported platforms.
-        sb->mRefs.store(1, std::memory_order_relaxed);
+        sb->mRefs = 1;
         sb->mSize = size;
     }
     return sb;
 }
 
 
-void SharedBuffer::dealloc(const SharedBuffer* released)
+ssize_t SharedBuffer::dealloc(const SharedBuffer* released)
 {
+    if (released->mRefs != 0) return -1; // XXX: invalid operation
     free(const_cast<SharedBuffer*>(released));
+    return 0;
 }
 
 SharedBuffer* SharedBuffer::edit() const
@@ -108,16 +107,14 @@ SharedBuffer* SharedBuffer::reset(size_t new_size) const
 }
 
 void SharedBuffer::acquire() const {
-    mRefs.fetch_add(1, std::memory_order_relaxed);
+    android_atomic_inc(&mRefs);
 }
 
 int32_t SharedBuffer::release(uint32_t flags) const
 {
     int32_t prev = 1;
-    if (onlyOwner()
-            || (((prev = mRefs.fetch_sub(1, std::memory_order_release)) == 1)
-                && (atomic_thread_fence(std::memory_order_acquire), true))) {
-        mRefs.store(0, std::memory_order_relaxed);
+    if (onlyOwner() || ((prev = android_atomic_dec(&mRefs)) == 1)) {
+        mRefs = 0;
         if ((flags & eKeepStorage) == 0) {
             free(const_cast<SharedBuffer*>(this));
         }

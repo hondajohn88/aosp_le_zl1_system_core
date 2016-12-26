@@ -16,8 +16,7 @@
 
 #include <ctype.h>
 
-#include <android-base/stringprintf.h>
-#include <cutils/properties.h>
+#include <utils/String8.h>
 
 #include "LogWhiteBlackList.h"
 
@@ -36,22 +35,21 @@ int Prune::cmp(uid_t uid, pid_t pid) const {
     return uid - mUid;
 }
 
-std::string Prune::format() {
+void Prune::format(char **strp) {
     if (mUid != uid_all) {
         if (mPid != pid_all) {
-            return android::base::StringPrintf("%u/%u", mUid, mPid);
+            asprintf(strp, "%u/%u", mUid, mPid);
+        } else {
+            asprintf(strp, "%u", mUid);
         }
-        return android::base::StringPrintf("%u", mUid);
+    } else if (mPid != pid_all) {
+        asprintf(strp, "/%u", mPid);
+    } else { // NB: mPid == pid_all can not happen if mUid == uid_all
+        asprintf(strp, "/");
     }
-    if (mPid != pid_all) {
-        return android::base::StringPrintf("/%u", mPid);
-    }
-    // NB: mPid == pid_all can not happen if mUid == uid_all
-    return std::string("/");
 }
 
-PruneList::PruneList() {
-    init(NULL);
+PruneList::PruneList() : mWorstUidEnabled(true) {
 }
 
 PruneList::~PruneList() {
@@ -64,9 +62,8 @@ PruneList::~PruneList() {
     }
 }
 
-int PruneList::init(const char *str) {
+int PruneList::init(char *str) {
     mWorstUidEnabled = true;
-    mWorstPidOfSystemEnabled = true;
     PruneCollection::iterator it;
     for (it = mNice.begin(); it != mNice.end();) {
         it = mNice.erase(it);
@@ -75,45 +72,13 @@ int PruneList::init(const char *str) {
         it = mNaughty.erase(it);
     }
 
-    static const char _default[] = "default";
-    // default here means take ro.logd.filter, persist.logd.filter then
-    // internal default in that order.
-    if (str && !strcmp(str, _default)) {
-        str = NULL;
-    }
-    static const char _disable[] = "disable";
-    if (str && !strcmp(str, _disable)) {
-        str = "";
-    }
-
-    std::string filter;
-
-    if (str) {
-        filter = str;
-    } else {
-        char property[PROPERTY_VALUE_MAX];
-        property_get("ro.logd.filter", property, _default);
-        filter = property;
-        property_get("persist.logd.filter", property, filter.c_str());
-        // default here means take ro.logd.filter
-        if (strcmp(property, _default)) {
-            filter = property;
-        }
-    }
-
-    // default here means take internal default.
-    if (filter == _default) {
-        // See README.property for description of filter format
-        filter = "~! ~1000/!";
-    }
-    if (filter == _disable) {
-        filter = "";
+    if (!str) {
+        return 0;
     }
 
     mWorstUidEnabled = false;
-    mWorstPidOfSystemEnabled = false;
 
-    for(str = filter.c_str(); *str; ++str) {
+    for(; *str; ++str) {
         if (isspace(*str)) {
             continue;
         }
@@ -125,19 +90,6 @@ int PruneList::init(const char *str) {
             if (*str == '!') {
                 mWorstUidEnabled = true;
                 ++str;
-                if (!*str) {
-                    break;
-                }
-                if (!isspace(*str)) {
-                    return 1;
-                }
-                continue;
-            }
-            // special case, translated to worst PID of System at priority
-            static const char worstPid[] = "1000/!";
-            if (!strncmp(str, worstPid, sizeof(worstPid) - 1)) {
-                mWorstPidOfSystemEnabled = true;
-                str += sizeof(worstPid) - 1;
                 if (!*str) {
                     break;
                 }
@@ -215,35 +167,47 @@ int PruneList::init(const char *str) {
     return 0;
 }
 
-std::string PruneList::format() {
+void PruneList::format(char **strp) {
+    if (*strp) {
+        free(*strp);
+        *strp = NULL;
+    }
+
     static const char nice_format[] = " %s";
     const char *fmt = nice_format + 1;
 
-    std::string string;
+    android::String8 string;
 
     if (mWorstUidEnabled) {
-        string = "~!";
+        string.setTo("~!");
         fmt = nice_format;
-        if (mWorstPidOfSystemEnabled) {
-            string += " ~1000/!";
-        }
     }
 
     PruneCollection::iterator it;
 
     for (it = mNice.begin(); it != mNice.end(); ++it) {
-        string += android::base::StringPrintf(fmt, (*it).format().c_str());
+        char *a = NULL;
+        (*it).format(&a);
+
+        string.appendFormat(fmt, a);
         fmt = nice_format;
+
+        free(a);
     }
 
     static const char naughty_format[] = " ~%s";
     fmt = naughty_format + (*fmt != ' ');
     for (it = mNaughty.begin(); it != mNaughty.end(); ++it) {
-        string += android::base::StringPrintf(fmt, (*it).format().c_str());
+        char *a = NULL;
+        (*it).format(&a);
+
+        string.appendFormat(fmt, a);
         fmt = naughty_format;
+
+        free(a);
     }
 
-    return string;
+    *strp = strdup(string.string());
 }
 
 // ToDo: Lists are in sorted order, Prune->cmp() returns + or -

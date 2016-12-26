@@ -23,61 +23,40 @@
 #include <errno.h>
 #include <cutils/partition_utils.h>
 #include <sys/mount.h>
-
-#include <ext4_utils/ext4_utils.h>
-#include <ext4_utils/ext4.h>
-#include <ext4_utils/make_ext4fs.h>
-#include <selinux/selinux.h>
-#include <selinux/label.h>
-#include <selinux/android.h>
-
+#include "ext4_utils.h"
+#include "ext4.h"
+#include "make_ext4fs.h"
 #include "fs_mgr_priv.h"
-#include "cryptfs.h"
 
 extern struct fs_info info;     /* magic global from ext4_utils */
 extern void reset_ext4fs_info();
 
-static int format_ext4(char *fs_blkdev, char *fs_mnt_point, bool crypt_footer)
+static int format_ext4(char *fs_blkdev, char *fs_mnt_point)
 {
-    uint64_t dev_sz;
+    unsigned int nr_sec;
     int fd, rc = 0;
 
-    if ((fd = open(fs_blkdev, O_WRONLY)) < 0) {
+    if ((fd = open(fs_blkdev, O_WRONLY, 0644)) < 0) {
         ERROR("Cannot open block device.  %s\n", strerror(errno));
         return -1;
     }
 
-    if ((ioctl(fd, BLKGETSIZE64, &dev_sz)) == -1) {
+    if ((ioctl(fd, BLKGETSIZE, &nr_sec)) == -1) {
         ERROR("Cannot get block device size.  %s\n", strerror(errno));
-        close(fd);
-        return -1;
-    }
-
-    struct selabel_handle *sehandle = selinux_android_file_context_handle();
-    if (!sehandle) {
-        /* libselinux logs specific error */
-        ERROR("Cannot initialize android file_contexts");
         close(fd);
         return -1;
     }
 
     /* Format the partition using the calculated length */
     reset_ext4fs_info();
-    info.len = (off64_t)dev_sz;
-    if (crypt_footer) {
-        info.len -= CRYPT_FOOTER_OFFSET;
-    }
+    info.len = ((off64_t)nr_sec * 512);
 
     /* Use make_ext4fs_internal to avoid wiping an already-wiped partition. */
-    rc = make_ext4fs_internal(fd, NULL, NULL, fs_mnt_point, 0, 0, 0, 0, 0, 0, sehandle, 0, 0, NULL, NULL, NULL);
+    rc = make_ext4fs_internal(fd, NULL, NULL, fs_mnt_point, 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL);
     if (rc) {
         ERROR("make_ext4fs returned %d.\n", rc);
     }
     close(fd);
-
-    if (sehandle) {
-        selabel_close(sehandle);
-    }
 
     return rc;
 }
@@ -122,7 +101,7 @@ static int format_f2fs(char *fs_blkdev)
     return rc;
 }
 
-int fs_mgr_do_format(struct fstab_rec *fstab, bool crypt_footer)
+int fs_mgr_do_format(struct fstab_rec *fstab)
 {
     int rc = -EINVAL;
 
@@ -131,7 +110,7 @@ int fs_mgr_do_format(struct fstab_rec *fstab, bool crypt_footer)
     if (!strncmp(fstab->fs_type, "f2fs", 4)) {
         rc = format_f2fs(fstab->blk_device);
     } else if (!strncmp(fstab->fs_type, "ext4", 4)) {
-        rc = format_ext4(fstab->blk_device, fstab->mount_point, crypt_footer);
+        rc = format_ext4(fstab->blk_device, fstab->mount_point);
     } else {
         ERROR("File system type '%s' is not supported\n", fstab->fs_type);
     }

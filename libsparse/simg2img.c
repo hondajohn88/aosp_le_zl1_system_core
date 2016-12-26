@@ -40,6 +40,7 @@ int main(int argc, char *argv[])
 	int in;
 	int out;
 	int i;
+	int ret;
 	struct sparse_file *s;
 
 	if (argc < 3) {
@@ -70,12 +71,10 @@ int main(int argc, char *argv[])
 			exit(-1);
 		}
 
-		if (lseek(out, 0, SEEK_SET) == -1) {
-			perror("lseek failed");
-			exit(EXIT_FAILURE);
-		}
+		lseek(out, SEEK_SET, 0);
 
-		if (sparse_file_write(s, out, false, false, false) < 0) {
+		ret = sparse_file_write(s, out, false, false, false);
+		if (ret < 0) {
 			fprintf(stderr, "Cannot write output file\n");
 			exit(-1);
 		}

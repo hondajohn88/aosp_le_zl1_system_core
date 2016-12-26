@@ -34,6 +34,7 @@
 
 #include <sys/mman.h>
 #include <cutils/ashmem.h>
+#include <cutils/atomic.h>
 
 #define __STDC_FORMAT_MACROS
 #include <inttypes.h>

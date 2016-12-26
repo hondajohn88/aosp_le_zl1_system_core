@@ -85,6 +85,7 @@ int main(int argc, char *argv[])
     char *fstab_file=NULL;
     struct fstab *fstab=NULL;
 
+    klog_init();
     klog_set_level(6);
 
     parse_options(argc, argv, &a_flag, &u_flag, &n_flag, &n_name, &n_blk_dev);
@@ -95,7 +96,7 @@ int main(int argc, char *argv[])
     fstab = fs_mgr_read_fstab(fstab_file);
 
     if (a_flag) {
-        return fs_mgr_mount_all(fstab, MOUNT_MODE_DEFAULT);
+        return fs_mgr_mount_all(fstab);
     } else if (n_flag) {
         return fs_mgr_do_mount(fstab, n_name, n_blk_dev, 0);
     } else if (u_flag) {
@@ -110,3 +111,4 @@ int main(int argc, char *argv[])
     /* Should not get here */
     exit(1);
 }
+

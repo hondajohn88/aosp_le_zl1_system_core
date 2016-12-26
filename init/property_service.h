@@ -18,23 +18,38 @@
 #define _INIT_PROPERTY_H
 
 #include <stddef.h>
-#include <sys/socket.h>
 #include <sys/system_properties.h>
-#include <string>
-
-struct property_audit_data {
-    ucred *cr;
-    const char* name;
-};
 
 extern void property_init(void);
 extern void property_load_boot_defaults(void);
 extern void load_persist_props(void);
 extern void load_system_props(void);
 extern void start_property_service(void);
-std::string property_get(const char* name);
+void get_property_workspace(int *fd, int *sz);
+extern int __property_get(const char *name, char *value);
 extern int property_set(const char *name, const char *value);
-extern bool is_legal_property_name(const std::string &name);
+extern bool properties_initialized();
 
+#ifndef __clang__
+extern void __property_get_size_error()
+    __attribute__((__error__("property_get called with too small buffer")));
+#else
+extern void __property_get_size_error();
+#endif
 
-#endif  /* _INIT_PROPERTY_H */
+static inline
+__attribute__ ((always_inline))
+__attribute__ ((gnu_inline))
+#ifndef __clang__
+__attribute__ ((artificial))
+#endif
+int property_get(const char *name, char *value)
+{
+    size_t value_len = __builtin_object_size(value, 0);
+    if (value_len != PROP_VALUE_MAX)
+        __property_get_size_error();
+
+    return __property_get(name, value);
+}
+
+#endif	/* _INIT_PROPERTY_H */

@@ -16,17 +16,20 @@
 
 #define LOG_TAG "fingerprintd"
 
-#include <android/log.h>
+#include <cutils/log.h>
+#include <utils/Log.h>
+
 #include <binder/IPCThreadState.h>
 #include <binder/IServiceManager.h>
 #include <binder/PermissionCache.h>
+#include <utils/String16.h>
+
+#include <keystore/IKeystoreService.h>
+#include <keystore/keystore.h> // for error codes
+
 #include <hardware/hardware.h>
 #include <hardware/fingerprint.h>
 #include <hardware/hw_auth_token.h>
-#include <keystore/IKeystoreService.h>
-#include <keystore/keystore.h> // for error codes
-#include <utils/Log.h>
-#include <utils/String16.h>
 
 #include "FingerprintDaemonProxy.h"
 

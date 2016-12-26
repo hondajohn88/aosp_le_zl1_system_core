@@ -1,8 +1,9 @@
+
 Android Init Language
 ---------------------
 
-The Android Init Language consists of five broad classes of statements,
-which are Actions, Commands, Services, Options, and Imports.
+The Android Init Language consists of four broad classes of statements,
+which are Actions, Commands, Services, and Options.
 
 All of these are line-oriented, consisting of tokens separated by
 whitespace.  The c-style backslash escapes may be used to insert
@@ -16,74 +17,10 @@ Actions and Services implicitly declare a new section.  All commands
 or options belong to the section most recently declared.  Commands
 or options before the first section are ignored.
 
-Actions and Services have unique names.  If a second Action is defined
-with the same name as an existing one, its commands are appended to
-the commands of the existing action.  If a second Service is defined
-with the same name as an existing one, it is ignored and an error
-message is logged.
+Actions and Services have unique names.  If a second Action or Service
+is declared with the same name as an existing one, it is ignored as
+an error.  (??? should we override instead)
 
-
-Init .rc Files
---------------
-The init language is used in plaintext files that take the .rc file
-extension.  These are typically multiple of these in multiple
-locations on the system, described below.
-
-/init.rc is the primary .rc file and is loaded by the init executable
-at the beginning of its execution.  It is responsible for the initial
-set up of the system.  It imports /init.${ro.hardware}.rc which is the
-primary vendor supplied .rc file.
-
-During the mount_all command, the init executable loads all of the
-files contained within the /{system,vendor,odm}/etc/init/ directories.
-These directories are intended for all Actions and Services used after
-file system mounting.
-
-One may specify paths in the mount_all command line to have it import
-.rc files at the specified paths instead of the default ones listed above.
-This is primarily for supporting factory mode and other non-standard boot
-modes.  The three default paths should be used for the normal boot process.
-
-The intention of these directories is as follows
-   1) /system/etc/init/ is for core system items such as
-      SurfaceFlinger, MediaService, and logcatd.
-   2) /vendor/etc/init/ is for SoC vendor items such as actions or
-      daemons needed for core SoC functionality.
-   3) /odm/etc/init/ is for device manufacturer items such as
-      actions or daemons needed for motion sensor or other peripheral
-      functionality.
-
-All services whose binaries reside on the system, vendor, or odm
-partitions should have their service entries placed into a
-corresponding init .rc file, located in the /etc/init/
-directory of the partition where they reside.  There is a build
-system macro, LOCAL_INIT_RC, that handles this for developers.  Each
-init .rc file should additionally contain any actions associated with
-its service.
-
-An example is the logcatd.rc and Android.mk files located in the
-system/core/logcat directory.  The LOCAL_INIT_RC macro in the
-Android.mk file places logcatd.rc in /system/etc/init/ during the
-build process.  Init loads logcatd.rc during the mount_all command and
-allows the service to be run and the action to be queued when
-appropriate.
-
-This break up of init .rc files according to their daemon is preferred
-to the previously used monolithic init .rc files.  This approach
-ensures that the only service entries that init reads and the only
-actions that init performs correspond to services whose binaries are in
-fact present on the file system, which was not the case with the
-monolithic init .rc files.  This additionally will aid in merge
-conflict resolution when multiple services are added to the system, as
-each one will go into a separate file.
-
-There are two options "early" and "late" in mount_all command
-which can be set after optional paths. With "--early" set, the
-init executable will skip mounting entries with "latemount" flag
-and triggering fs encryption state event. With "--late" set,
-init executable will only mount entries with "latemount" flag but skip
-importing rc files. By default, no option is set, and mount_all will
-mount_all will process all entries in the given fstab.
 
 Actions
 -------
@@ -100,7 +37,7 @@ that action is executed in sequence.  Init handles other activities
 
 Actions take the form of:
 
-on <trigger> [&& <trigger>]*
+on <trigger>
    <command>
    <command>
    <command>
@@ -122,13 +59,6 @@ Options
 Options are modifiers to services.  They affect how and when init
 runs the service.
 
-console [<console>]
-  This service needs a console. The optional second parameter chooses a
-  specific console instead of the default. The default "/dev/console" can
-  be changed by setting the "androidboot.console" kernel parameter. In
-  all cases the leading "/dev/" should be omitted, so "/dev/tty0" would be
-  specified as just "console tty0".
-
 critical
   This is a device-critical service. If it exits more than four times in
   four minutes, the device will reboot into recovery mode.
@@ -141,45 +71,25 @@ setenv <name> <value>
   Set the environment variable <name> to <value> in the launched process.
 
 socket <name> <type> <perm> [ <user> [ <group> [ <seclabel> ] ] ]
-  Create a unix domain socket named /dev/socket/<name> and pass its fd to the
-  launched process.  <type> must be "dgram", "stream" or "seqpacket".  User and
-  group default to 0.  'seclabel' is the SELinux security context for the
-  socket.  It defaults to the service security context, as specified by
-  seclabel or computed based on the service executable file security context.
-  For native executables see libcutils android_get_control_socket().
-
-file <path> <type>
-  Open a file path and pass its fd to the launched process.  <type> must be
-  "r", "w" or "rw".  For native executables see libcutils
-  android_get_control_file().
+  Create a unix domain socket named /dev/socket/<name> and pass
+  its fd to the launched process.  <type> must be "dgram", "stream" or "seqpacket".
+  User and group default to 0.
+  'seclabel' is the SELinux security context for the socket.
+  It defaults to the service security context, as specified by seclabel or
+  computed based on the service executable file security context.
 
 user <username>
-  Change to 'username' before exec'ing this service.
+  Change to username before exec'ing this service.
   Currently defaults to root.  (??? probably should default to nobody)
-  As of Android M, processes should use this option even if they
-  require Linux capabilities.  Previously, to acquire Linux
-  capabilities, a process would need to run as root, request the
-  capabilities, then drop to its desired uid.  There is a new
-  mechanism through fs_config that allows device manufacturers to add
-  Linux capabilities to specific binaries on a file system that should
-  be used instead. This mechanism is described on
-  http://source.android.com/devices/tech/config/filesystem.html.  When
-  using this new mechanism, processes can use the user option to
-  select their desired uid without ever running as root.
-  As of Android O, processes can also request capabilities directly in their .rc
-  files. See the "capabilities" option below.
+  Currently, if your process requires linux capabilities then you cannot use
+  this command. You must instead request the capabilities in-process while
+  still root, and then drop to your desired uid.
 
 group <groupname> [ <groupname> ]*
-  Change to 'groupname' before exec'ing this service.  Additional
+  Change to groupname before exec'ing this service.  Additional
   groupnames beyond the (required) first one are used to set the
   supplemental groups of the process (via setgroups()).
   Currently defaults to root.  (??? probably should default to nobody)
-
-capabilities <capability> [ <capability> ]*
-  Set capabilities when exec'ing this service. 'capability' should be a Linux
-  capability without the "CAP_" prefix, like "NET_ADMIN" or "SETPCAP". See
-  http://man7.org/linux/man-pages/man7/capabilities.7.html for a list of Linux
-  capabilities.
 
 seclabel <seclabel>
   Change to 'seclabel' before exec'ing this service.
@@ -204,59 +114,36 @@ writepid <file...>
   Write the child's pid to the given files when it forks. Meant for
   cgroup/cpuset usage.
 
-priority <priority>
-  Scheduling priority of the service process. This value has to be in range
-  -20 to 19. Default priority is 0. Priority is set via setpriority().
-
-namespace <pid|mnt>
-  Enter a new PID or mount namespace when forking the service.
-
-oom_score_adjust <value>
-   Sets the child's /proc/self/oom_score_adj to the specified value,
-   which must range from -1000 to 1000.
-
 
 Triggers
 --------
-Triggers are strings which can be used to match certain kinds of
-events and used to cause an action to occur.
+Triggers are strings which can be used to match certain kinds
+of events and used to cause an action to occur.
 
-Triggers are subdivided into event triggers and property triggers.
+boot
+   This is the first trigger that will occur when init starts
+   (after /init.conf is loaded)
 
-Event triggers are strings triggered by the 'trigger' command or by
-the QueueEventTrigger() function within the init executable.  These
-take the form of a simple string such as 'boot' or 'late-init'.
+<name>=<value>
+   Triggers of this form occur when the property <name> is set
+   to the specific value <value>.
 
-Property triggers are strings triggered when a named property changes
-value to a given new value or when a named property changes value to
-any new value.  These take the form of 'property:<name>=<value>' and
-'property:<name>=*' respectively.  Property triggers are additionally
-evaluated and triggered accordingly during the initial boot phase of
-init.
+   One can also test multiple properties to execute a group
+   of commands. For example:
 
-An Action can have multiple property triggers but may only have one
-event trigger.
+   on property:test.a=1 && property:test.b=1
+       setprop test.c 1
 
-For example:
-'on boot && property:a=b' defines an action that is only executed when
-the 'boot' event trigger happens and the property a equals b.
-
-'on property:a=b && property:c=d' defines an action that is executed
-at three times,
-   1) During initial boot if property a=b and property c=d
-   2) Any time that property a transitions to value b, while property
-      c already equals d.
-   3) Any time that property c transitions to value d, while property
-      a already equals b.
+   The above stub sets test.c to 1 only when
+   both test.a=1 and test.b=1
 
 
 Commands
 --------
 
-bootchart [start|stop]
-   Start/stop bootcharting. These are present in the default init.rc files,
-   but bootcharting is only active if the file /data/bootchart/enabled exists;
-   otherwise bootchart start/stop are no-ops.
+bootchart_init
+   Start bootcharting if configured (see below).
+   This is included in the default init.rc.
 
 chmod <octal-mode> <path>
    Change file access permissions.
@@ -310,11 +197,11 @@ hostname <name>
 ifup <interface>
    Bring the network interface <interface> online.
 
-insmod [-f] <path> [<options>]
-   Install the module at <path> with the specified options.
-   -f
-   Force installation of the module even if the version of the running kernel
-   and the version of the kernel for which the module was compiled do not match.
+import <filename>
+   Parse an init config file, extending the current configuration.
+
+insmod <path>
+   Install the module at <path>
 
 load_all_props
    Loads properties from /system, /vendor, et cetera.
@@ -333,14 +220,13 @@ mkdir <path> [mode] [owner] [group]
    owned by the root user and root group. If provided, the mode, owner and group
    will be updated if the directory exists already.
 
-mount_all <fstab> [ <path> ]* [--<option>]
-   Calls fs_mgr_mount_all on the given fs_mgr-format fstab and imports .rc files
-   at the specified paths (e.g., on the partitions just mounted) with optional
-   options "early" and "late".
-   Refer to the section of "Init .rc Files" for detail.
+mount_all <fstab>
+   Calls fs_mgr_mount_all on the given fs_mgr-format fstab.
 
 mount <type> <device> <dir> [ <flag> ]* [<options>]
    Attempt to mount the named device at the directory <dir>
+   <device> may be of the form mtd@name to specify a mtd block
+   device by name.
    <flag>s include "ro", "rw", "remount", "noatime", ...
    <options> include "barrier=1", "noauto_da_alloc", "discard", ... as
    a comma separated string, eg: barrier=1,noauto_da_alloc
@@ -396,9 +282,6 @@ trigger <event>
    Trigger an event.  Used to queue an action from another
    action.
 
-umount <path>
-   Unmount the filesystem mounted at that path.
-
 verity_load_state
    Internal implementation detail used to load dm-verity state.
 
@@ -418,50 +301,19 @@ write <path> <content>
    it will be truncated. Properties are expanded within <content>.
 
 
-Imports
--------
-The import keyword is not a command, but rather its own section and is
-handled immediately after the .rc file that contains it has finished
-being parsed.  It takes the below form:
-
-import <path>
-   Parse an init config file, extending the current configuration.
-   If <path> is a directory, each file in the directory is parsed as
-   a config file. It is not recursive, nested directories will
-   not be parsed.
-
-There are only two times where the init executable imports .rc files,
-   1) When it imports /init.rc during initial boot
-   2) When it imports /{system,vendor,odm}/etc/init/ or .rc files at specified
-      paths during mount_all
-
-
 Properties
 ----------
-Init provides information about the services that it is responsible
-for via the below properties.
+Init updates some system properties to provide some insight into
+what it's doing:
+
+init.action
+   Equal to the name of the action currently being executed or "" if none
+
+init.command
+   Equal to the command being executed or "" if none.
 
 init.svc.<name>
-  State of a named service ("stopped", "stopping", "running", "restarting")
-
-
-Boot timing
------------
-Init records some boot timing information in system properties.
-
-ro.boottime.init
-  Time after boot in ns (via the CLOCK_BOOTTIME clock) at which the first
-  stage of init started.
-
-ro.boottime.init.selinux
-  How long it took the first stage to initialize SELinux.
-
-ro.boottime.init.cold_boot_wait
-  How long init waited for ueventd's coldboot phase to end.
-
-ro.boottime.<service-name>
-  Time after boot in ns (via the CLOCK_BOOTTIME clock) that the service was
-  first started.
+   State of a named service ("stopped", "running", "restarting")
 
 
 Bootcharting
@@ -472,11 +324,19 @@ files that can be later processed by the tools provided by www.bootchart.org.
 On the emulator, use the -bootchart <timeout> option to boot with bootcharting
 activated for <timeout> seconds.
 
-On a device:
+On a device, create /data/bootchart/start with a command like the following:
 
-  adb shell 'touch /data/bootchart/enabled'
+  adb shell 'echo $TIMEOUT > /data/bootchart/start'
 
-Don't forget to delete this file when you're done collecting data!
+Where the value of $TIMEOUT corresponds to the desired bootcharted period in
+seconds. Bootcharting will stop after that many seconds have elapsed.
+You can also stop the bootcharting at any moment by doing the following:
+
+  adb shell 'echo 1 > /data/bootchart/stop'
+
+Note that /data/bootchart/stop is deleted automatically by init at the end of
+the bootcharting. This is not the case with /data/bootchart/start, so don't
+forget to delete it when you're done collecting data.
 
 The log files are written to /data/bootchart/. A script is provided to
 retrieve them and create a bootchart.tgz file that can be used with the
@@ -491,52 +351,6 @@ running at 0s. You'll have to look at dmesg to work out when the kernel
 actually started init.
 
 
-Comparing two bootcharts
-------------------------
-A handy script named compare-bootcharts.py can be used to compare the
-start/end time of selected processes. The aforementioned grab-bootchart.sh
-will leave a bootchart tarball named bootchart.tgz at /tmp/android-bootchart.
-If two such barballs are preserved on the host machine under different
-directories, the script can list the timestamps differences. For example:
-
-Usage: system/core/init/compare-bootcharts.py base_bootchart_dir
-       exp_bootchart_dir
-
-process: baseline experiment (delta)
- - Unit is ms (a jiffy is 10 ms on the system)
-------------------------------------
-/init: 50 40 (-10)
-/system/bin/surfaceflinger: 4320 4470 (+150)
-/system/bin/bootanimation: 6980 6990 (+10)
-zygote64: 10410 10640 (+230)
-zygote: 10410 10640 (+230)
-system_server: 15350 15150 (-200)
-bootanimation ends at: 33790 31230 (-2560)
-
-
-Systrace
---------
-Systrace [1] can be used for obtaining performance analysis reports during boot
-time on userdebug or eng builds.
-Here is an example of trace events of "wm" and "am" categories:
-
-  $ANDROID_BUILD_TOP/external/chromium-trace/systrace.py wm am --boot
-
-This command will cause the device to reboot. After the device is rebooted and
-the boot sequence has finished, the trace report is obtained from the device
-and written as trace.html on the host by hitting Ctrl+C.
-
-LIMITATION
-Recording trace events is started after persistent properties are loaded, so
-the trace events that are emitted before that are not recorded. Several
-services such as vold, surfaceflinger, and servicemanager are affected by this
-limitation since they are started before persistent properties are loaded.
-Zygote initialization and the processes that are forked from the zygote are not
-affected.
-
-[1] http://developer.android.com/tools/help/systrace.html
-
-
 Debugging init
 --------------
 By default, programs executed by init will drop stdout and stderr into
@@ -549,12 +363,15 @@ service akmd /system/bin/logwrapper /sbin/akmd
 
 For quicker turnaround when working on init itself, use:
 
-  mm -j &&
-  m ramdisk-nodeps &&
-  m bootimage-nodeps &&
-  adb reboot bootloader &&
+  mm -j
+  m ramdisk-nodeps
+  m bootimage-nodeps
+  adb reboot bootloader
   fastboot boot $ANDROID_PRODUCT_OUT/boot.img
 
 Alternatively, use the emulator:
 
   emulator -partition-size 1024 -verbose -show-kernel -no-window
+
+You might want to call klog_set_level(6) after the klog_init() call
+so you see the kernel logging in dmesg (or the emulator output).

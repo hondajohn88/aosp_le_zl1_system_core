@@ -17,10 +17,13 @@
 #ifndef _INIT_LOG_H_
 #define _INIT_LOG_H_
 
-#include <android-base/logging.h>
+#include <cutils/klog.h>
 
-void InitKernelLogging(char* argv[]);
+#define ERROR(x...)   init_klog_write(KLOG_ERROR_LEVEL, x)
+#define NOTICE(x...)  init_klog_write(KLOG_NOTICE_LEVEL, x)
+#define INFO(x...)    init_klog_write(KLOG_INFO_LEVEL, x)
 
+void init_klog_write(int level, const char* fmt, ...) __printflike(2, 3);
 int selinux_klog_callback(int level, const char* fmt, ...) __printflike(2, 3);
 
 #endif

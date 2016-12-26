@@ -16,17 +16,14 @@
 
 #include <ctype.h>
 #include <fcntl.h>
-#include <grp.h>
 #include <poll.h>
-#include <pwd.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-#include <sys/types.h>
-
-#include <android-base/stringprintf.h>
+#include <base/stringprintf.h>
+#include <private/android_filesystem_config.h>
 #include <selinux/selinux.h>
 
 #include "ueventd.h"
@@ -52,18 +49,21 @@ int ueventd_main(int argc, char **argv)
      */
     signal(SIGCHLD, SIG_IGN);
 
-    InitKernelLogging(argv);
+    open_devnull_stdio();
+    klog_init();
+    klog_set_level(KLOG_NOTICE_LEVEL);
 
-    LOG(INFO) << "ueventd started!";
+    NOTICE("ueventd started!\n");
 
     selinux_callback cb;
     cb.func_log = selinux_klog_callback;
     selinux_set_callback(SELINUX_CB_LOG, cb);
 
-    std::string hardware = property_get("ro.hardware");
+    char hardware[PROP_VALUE_MAX];
+    property_get("ro.hardware", hardware);
 
     ueventd_parse_config_file("/ueventd.rc");
-    ueventd_parse_config_file(android::base::StringPrintf("/ueventd.%s.rc", hardware.c_str()).c_str());
+    ueventd_parse_config_file(android::base::StringPrintf("/ueventd.%s.rc", hardware).c_str());
 
     device_init();
 
@@ -85,6 +85,15 @@ int ueventd_main(int argc, char **argv)
     return 0;
 }
 
+static int get_android_id(const char *id)
+{
+    unsigned int i;
+    for (i = 0; i < ARRAY_SIZE(android_ids); i++)
+        if (!strcmp(id, android_ids[i].name))
+            return android_ids[i].aid;
+    return -1;
+}
+
 void set_device_permission(int nargs, char **args)
 {
     char *name;
@@ -95,6 +104,8 @@ void set_device_permission(int nargs, char **args)
     int prefix = 0;
     int wildcard = 0;
     char *endptr;
+    int ret;
+    char *tmp = 0;
 
     if (nargs == 0)
         return;
@@ -105,53 +116,58 @@ void set_device_permission(int nargs, char **args)
     name = args[0];
 
     if (!strncmp(name,"/sys/", 5) && (nargs == 5)) {
-        LOG(INFO) << "/sys/ rule " << args[0] << " " << args[1];
+        INFO("/sys/ rule %s %s\n",args[0],args[1]);
         attr = args[1];
         args++;
         nargs--;
     }
 
     if (nargs != 4) {
-        LOG(ERROR) << "invalid line ueventd.rc line for '" << args[0] << "'";
+        ERROR("invalid line ueventd.rc line for '%s'\n", args[0]);
         return;
     }
 
-    int len = strlen(name);
-    char *wildcard_chr = strchr(name, '*');
-    if ((name[len - 1] == '*') && (wildcard_chr == (name + len - 1))) {
-        prefix = 1;
-        name[len - 1] = '\0';
-    } else if (wildcard_chr) {
-        wildcard = 1;
+    /* If path starts with mtd@ lookup the mount number. */
+    if (!strncmp(name, "mtd@", 4)) {
+        int n = mtd_name_to_number(name + 4);
+        if (n >= 0)
+            asprintf(&tmp, "/dev/mtd/mtd%d", n);
+        name = tmp;
+    } else {
+        int len = strlen(name);
+        char *wildcard_chr = strchr(name, '*');
+        if ((name[len - 1] == '*') &&
+            (wildcard_chr == (name + len - 1))) {
+            prefix = 1;
+            name[len - 1] = '\0';
+        } else if (wildcard_chr) {
+            wildcard = 1;
+        }
     }
 
     perm = strtol(args[1], &endptr, 8);
     if (!endptr || *endptr != '\0') {
-        LOG(ERROR) << "invalid mode '" << args[1] << "'";
+        ERROR("invalid mode '%s'\n", args[1]);
+        free(tmp);
         return;
     }
 
-    struct passwd* pwd = getpwnam(args[2]);
-    if (!pwd) {
-        LOG(ERROR) << "invalid uid '" << args[2] << "'";
+    ret = get_android_id(args[2]);
+    if (ret < 0) {
+        ERROR("invalid uid '%s'\n", args[2]);
+        free(tmp);
         return;
     }
-    uid = pwd->pw_uid;
+    uid = ret;
 
-    struct group* grp = getgrnam(args[3]);
-    if (!grp) {
-        LOG(ERROR) << "invalid gid '" << args[3] << "'";
+    ret = get_android_id(args[3]);
+    if (ret < 0) {
+        ERROR("invalid gid '%s'\n", args[3]);
+        free(tmp);
         return;
     }
-    gid = grp->gr_gid;
+    gid = ret;
 
-    if (add_dev_perms(name, attr, perm, uid, gid, prefix, wildcard) != 0) {
-        PLOG(ERROR) << "add_dev_perms(name=" << name <<
-                       ", attr=" << attr <<
-                       ", perm=" << std::oct << perm << std::dec <<
-                       ", uid=" << uid << ", gid=" << gid <<
-                       ", prefix=" << prefix << ", wildcard=" << wildcard <<
-                       ")";
-        return;
-    }
+    add_dev_perms(name, attr, perm, uid, gid, prefix, wildcard);
+    free(tmp);
 }

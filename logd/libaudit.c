@@ -22,16 +22,21 @@
 #include <string.h>
 #include <unistd.h>
 
+#define LOG_TAG "libaudit"
+#include <log/log.h>
+
 #include "libaudit.h"
 
 /**
  * Waits for an ack from the kernel
  * @param fd
  *  The netlink socket fd
+ * @param seq
+ *  The current sequence number were acking on
  * @return
  *  This function returns 0 on success, else -errno.
  */
-static int get_ack(int fd)
+static int get_ack(int fd, int16_t seq)
 {
     int rc;
     struct audit_message rep;
@@ -52,6 +57,11 @@ static int get_ack(int fd)
         if (rc) {
             return -rc;
         }
+    }
+
+    if ((int16_t)rep.nlh.nlmsg_seq != seq) {
+        SLOGW("Expected sequence number between user space and kernel space is out of skew, "
+          "expected %u got %u", seq, rep.nlh.nlmsg_seq);
     }
 
     return 0;
@@ -98,6 +108,7 @@ static int audit_send(int fd, int type, const void *data, size_t size)
 
     /* Ensure the message is not too big */
     if (NLMSG_SPACE(size) > MAX_AUDIT_MESSAGE_LENGTH) {
+        SLOGE("netlink message is too large");
         return -EINVAL;
     }
 
@@ -128,6 +139,7 @@ static int audit_send(int fd, int type, const void *data, size_t size)
     /* Not all the bytes were sent */
     if (rc < 0) {
         rc = -errno;
+        SLOGE("Error sending data over the netlink socket: %s", strerror(-errno));
         goto out;
     } else if ((uint32_t) rc != req.nlh.nlmsg_len) {
         rc = -EPROTO;
@@ -135,7 +147,7 @@ static int audit_send(int fd, int type, const void *data, size_t size)
     }
 
     /* We sent all the bytes, get the ack */
-    rc = get_ack(fd);
+    rc = get_ack(fd, sequence);
 
     /* If the ack failed, return the error, else return the sequence number */
     rc = (rc == 0) ? (int) sequence : rc;
@@ -143,6 +155,7 @@ static int audit_send(int fd, int type, const void *data, size_t size)
 out:
     /* Don't let sequence roll to negative */
     if (sequence < 0) {
+        SLOGW("Auditd to Kernel sequence number has rolled over");
         sequence = 0;
     }
 
@@ -169,6 +182,7 @@ int audit_setup(int fd, uint32_t pid)
     /* Let the kernel know this pid will be registering for audit events */
     rc = audit_send(fd, AUDIT_SET, &status, sizeof(status));
     if (rc < 0) {
+        SLOGE("Could net set pid for audit events, error: %s", strerror(-rc));
         return rc;
     }
 
@@ -226,21 +240,25 @@ int audit_get_reply(int fd, struct audit_message *rep, reply_t block, int peek)
             /* If request is non blocking and errno is EAGAIN, just return 0 */
             return 0;
         }
+        SLOGE("Error receiving from netlink socket, error: %s", strerror(-rc));
         return rc;
     }
 
     if (nladdrlen != sizeof(nladdr)) {
+        SLOGE("Protocol fault, error: %s", strerror(EPROTO));
         return -EPROTO;
     }
 
     /* Make sure the netlink message was not spoof'd */
     if (nladdr.nl_pid) {
+        SLOGE("Invalid netlink pid received, expected 0 got: %d", nladdr.nl_pid);
         return -EINVAL;
     }
 
     /* Check if the reply from the kernel was ok */
     if (!NLMSG_OK(&rep->nlh, (size_t)len)) {
         rc = (len == sizeof(*rep)) ? -EFBIG : -EBADE;
+        SLOGE("Bad kernel response %s", strerror(-rc));
     }
 
     return rc;
@@ -248,5 +266,9 @@ int audit_get_reply(int fd, struct audit_message *rep, reply_t block, int peek)
 
 void audit_close(int fd)
 {
-    close(fd);
+    int rc = close(fd);
+    if (rc < 0) {
+        SLOGE("Attempting to close invalid fd %d, error: %s", fd, strerror(errno));
+    }
+    return;
 }

@@ -22,7 +22,6 @@
 
 #include <stdint.h>
 #include <string.h>
-#include <sys/cdefs.h>
 #include <sys/types.h>
 #include <utils/Compat.h>
 
@@ -34,32 +33,17 @@ enum {
   kCompressDeflated   = 8,        // standard deflate
 };
 
-struct ZipString {
+struct ZipEntryName {
   const uint8_t* name;
   uint16_t name_length;
 
-  ZipString() {}
+  ZipEntryName() {}
 
   /*
    * entry_name has to be an c-style string with only ASCII characters.
    */
-  explicit ZipString(const char* entry_name);
-
-  bool operator==(const ZipString& rhs) const {
-    return name && (name_length == rhs.name_length) &&
-        (memcmp(name, rhs.name, name_length) == 0);
-  }
-
-  bool StartsWith(const ZipString& prefix) const {
-    return name && (name_length >= prefix.name_length) &&
-        (memcmp(name, prefix.name, prefix.name_length) == 0);
-  }
-
-  bool EndsWith(const ZipString& suffix) const {
-    return name && (name_length >= suffix.name_length) &&
-        (memcmp(name + name_length - suffix.name_length, suffix.name,
-                suffix.name_length) == 0);
-  }
+  explicit ZipEntryName(const char* entry_name)
+      : name(reinterpret_cast<const uint8_t*>(entry_name)), name_length(strlen(entry_name)) {}
 };
 
 /*
@@ -130,8 +114,6 @@ int32_t OpenArchive(const char* fileName, ZipArchiveHandle* handle);
 int32_t OpenArchiveFd(const int fd, const char* debugFileName,
                       ZipArchiveHandle *handle, bool assume_ownership = true);
 
-int32_t OpenArchiveFromMemory(void* address, size_t length, const char* debugFileName,
-                              ZipArchiveHandle *handle);
 /*
  * Close archive, releasing resources associated with it. This will
  * unmap the central directory of the zipfile and free all internal
@@ -153,11 +135,8 @@ void CloseArchive(ZipArchiveHandle handle);
  * if this file entry contains a data descriptor footer. To verify crc32s
  * and length, a call to VerifyCrcAndLengths must be made after entry data
  * has been processed.
- *
- * On non-Windows platforms this method does not modify internal state and
- * can be called concurrently.
  */
-int32_t FindEntry(const ZipArchiveHandle handle, const ZipString& entryName,
+int32_t FindEntry(const ZipArchiveHandle handle, const ZipEntryName& entryName,
                   ZipEntry* data);
 
 /*
@@ -168,14 +147,15 @@ int32_t FindEntry(const ZipArchiveHandle handle, const ZipString& entryName,
  * calls to Next. All calls to StartIteration must be matched by a call to
  * EndIteration to free any allocated memory.
  *
- * This method also accepts optional prefix and suffix to restrict iteration to
- * entry names that start with |optional_prefix| or end with |optional_suffix|.
+ * This method also accepts an optional prefix to restrict iteration to
+ * entry names that start with |optional_prefix|.
  *
  * Returns 0 on success and negative values on failure.
  */
 int32_t StartIteration(ZipArchiveHandle handle, void** cookie_ptr,
-                       const ZipString* optional_prefix,
-                       const ZipString* optional_suffix);
+                       const ZipEntryName* optional_prefix,
+                       // TODO: Remove the default parameter.
+                       const ZipEntryName* optional_suffix = NULL);
 
 /*
  * Advance to the next element in the zipfile in iteration order.
@@ -183,7 +163,7 @@ int32_t StartIteration(ZipArchiveHandle handle, void** cookie_ptr,
  * Returns 0 on success, -1 if there are no more elements in this
  * archive and lower negative values on failure.
  */
-int32_t Next(void* cookie, ZipEntry* data, ZipString* name);
+int32_t Next(void* cookie, ZipEntry* data, ZipEntryName *name);
 
 /*
  * End iteration over all entries of a zip file and frees the memory allocated
@@ -195,8 +175,7 @@ void EndIteration(void* cookie);
  * Uncompress and write an entry to an open file identified by |fd|.
  * |entry->uncompressed_length| bytes will be written to the file at
  * its current offset, and the file will be truncated at the end of
- * the uncompressed data (no truncation if |fd| references a block
- * device).
+ * the uncompressed data.
  *
  * Returns 0 on success and negative values on failure.
  */
@@ -216,17 +195,6 @@ int32_t ExtractToMemory(ZipArchiveHandle handle, ZipEntry* entry,
 int GetFileDescriptor(const ZipArchiveHandle handle);
 
 const char* ErrorCodeString(int32_t error_code);
-
-#if !defined(_WIN32)
-typedef bool (*ProcessZipEntryFunction)(const uint8_t* buf, size_t buf_size, void* cookie);
-
-/*
- * Stream the uncompressed data through the supplied function,
- * passing cookie to it each time it gets called.
-*/
-int32_t ProcessZipEntryContents(ZipArchiveHandle handle, ZipEntry* entry,
-        ProcessZipEntryFunction func, void* cookie);
-#endif
 
 __END_DECLS
 

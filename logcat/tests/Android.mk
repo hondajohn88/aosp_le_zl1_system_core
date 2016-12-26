@@ -25,6 +25,7 @@ test_c_flags := \
     -Wall -Wextra \
     -Werror \
     -fno-builtin \
+    -std=gnu++11
 
 # -----------------------------------------------------------------------------
 # Benchmarks (actually a gTest where the result code does not matter)

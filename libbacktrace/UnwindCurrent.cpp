@@ -70,7 +70,6 @@ bool UnwindCurrent::UnwindFromContext(size_t num_ignore_frames, ucontext_t* ucon
     int ret = unw_getcontext(&context_);
     if (ret < 0) {
       BACK_LOGW("unw_getcontext failed %d", ret);
-      error_ = BACKTRACE_UNWIND_ERROR_SETUP_FAILED;
       return false;
     }
   } else {
@@ -82,7 +81,6 @@ bool UnwindCurrent::UnwindFromContext(size_t num_ignore_frames, ucontext_t* ucon
   int ret = unw_init_local(cursor.get(), &context_);
   if (ret < 0) {
     BACK_LOGW("unw_init_local failed %d", ret);
-    error_ = BACKTRACE_UNWIND_ERROR_SETUP_FAILED;
     return false;
   }
 

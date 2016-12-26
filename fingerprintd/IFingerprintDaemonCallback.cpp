@@ -27,7 +27,7 @@ namespace android {
 class BpFingerprintDaemonCallback : public BpInterface<IFingerprintDaemonCallback>
 {
 public:
-    explicit BpFingerprintDaemonCallback(const sp<IBinder>& impl) :
+    BpFingerprintDaemonCallback(const sp<IBinder>& impl) :
             BpInterface<IFingerprintDaemonCallback>(impl) {
     }
     virtual status_t onEnrollResult(int64_t devId, int32_t fpId, int32_t gpId, int32_t rem) {
@@ -74,13 +74,13 @@ public:
         return remote()->transact(ON_REMOVED, data, &reply, IBinder::FLAG_ONEWAY);
     }
 
-    virtual status_t onEnumerate(int64_t devId, int32_t fpId, int32_t gpId, int32_t rem) {
+    virtual status_t onEnumerate(int64_t devId, const int32_t* fpIds, const int32_t* gpIds,
+            int32_t sz) {
         Parcel data, reply;
         data.writeInterfaceToken(IFingerprintDaemonCallback::getInterfaceDescriptor());
         data.writeInt64(devId);
-        data.writeInt32(fpId);
-        data.writeInt32(gpId);
-        data.writeInt32(rem);
+        data.writeInt32Array(sz, fpIds);
+        data.writeInt32Array(sz, gpIds);
         return remote()->transact(ON_ENUMERATE, data, &reply, IBinder::FLAG_ONEWAY);
     }
 };

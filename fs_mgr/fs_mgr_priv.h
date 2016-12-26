@@ -20,8 +20,6 @@
 #include <cutils/klog.h>
 #include <fs_mgr.h>
 
-__BEGIN_DECLS
-
 #define INFO(x...)    KLOG_INFO("fs_mgr", x)
 #define WARNING(x...) KLOG_WARNING("fs_mgr", x)
 #define ERROR(x...)   KLOG_ERROR("fs_mgr", x)
@@ -48,7 +46,7 @@ __BEGIN_DECLS
  *
  *   <fs_mgr_options> is a comma separated list of flags that control the operation of
  *                     the fs_mgr program.  The list includes "wait", which will wait till
- *                     the <source> file exists, and "check", which requests that the fs_mgr
+ *                     the <source> file exists, and "check", which requests that the fs_mgr 
  *                     run an fscheck program on the <source> before mounting the filesystem.
  *                     If check is specifed on a read-only filesystem, it is ignored.
  *                     Also, "encryptable" means that filesystem can be encrypted.
@@ -65,36 +63,25 @@ __BEGIN_DECLS
  *
  */
 
-#define MF_WAIT                  0x1
-#define MF_CHECK                 0x2
-#define MF_CRYPT                 0x4
-#define MF_NONREMOVABLE          0x8
-#define MF_VOLDMANAGED          0x10
-#define MF_LENGTH               0x20
-#define MF_RECOVERYONLY         0x40
-#define MF_SWAPPRIO             0x80
-#define MF_ZRAMSIZE            0x100
-#define MF_VERIFY              0x200
-#define MF_FORCECRYPT          0x400
-#define MF_NOEMULATEDSD        0x800 /* no emulated sdcard daemon, sd card is the only
-                                        external storage */
-#define MF_NOTRIM             0x1000
-#define MF_FILEENCRYPTION     0x2000
-#define MF_FORMATTABLE        0x4000
-#define MF_SLOTSELECT         0x8000
-#define MF_FORCEFDEORFBE     0x10000
-#define MF_LATEMOUNT         0x20000
-#define MF_NOFAIL            0x40000
-#define MF_VERIFYATBOOT      0x80000
-#define MF_MAX_COMP_STREAMS 0x100000
-#define MF_RESERVEDSIZE     0x200000
-#define MF_QUOTA            0x400000
+#define MF_WAIT         0x1
+#define MF_CHECK        0x2
+#define MF_CRYPT        0x4
+#define MF_NONREMOVABLE 0x8
+#define MF_VOLDMANAGED  0x10
+#define MF_LENGTH       0x20
+#define MF_RECOVERYONLY 0x40
+#define MF_SWAPPRIO     0x80
+#define MF_ZRAMSIZE     0x100
+#define MF_VERIFY       0x200
+#define MF_FORCECRYPT   0x400
+#define MF_NOEMULATEDSD 0x800 /* no emulated sdcard daemon, sd card is the only
+                                 external storage */
+#define MF_NOTRIM       0x1000
+#define MF_FILEENCRYPTION 0x2000
+#define MF_FORMATTABLE  0x4000
 
 #define DM_BUF_SIZE 4096
 
 int fs_mgr_set_blk_ro(const char *blockdev);
-int fs_mgr_update_for_slotselect(struct fstab *fstab);
-
-__END_DECLS
 
 #endif /* __CORE_FS_MGR_PRIV_H */

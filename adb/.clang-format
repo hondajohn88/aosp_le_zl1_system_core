@@ -2,8 +2,6 @@ BasedOnStyle: Google
 AllowShortBlocksOnASingleLine: false
 AllowShortFunctionsOnASingleLine: false
 
-AccessModifierOffset: -2
-ColumnLimit: 100
 CommentPragmas: NOLINT:.*
 DerivePointerAlignment: false
 IndentWidth: 4

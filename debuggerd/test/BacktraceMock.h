@@ -41,7 +41,7 @@ class BacktraceMapMock : public BacktraceMap {
 
 class BacktraceMock : public Backtrace {
  public:
-  explicit BacktraceMock(BacktraceMapMock* map) : Backtrace(0, 0, map) {
+  BacktraceMock(BacktraceMapMock* map) : Backtrace(0, 0, map) {
     if (map_ == nullptr) {
       abort();
     }
@@ -60,14 +60,12 @@ class BacktraceMock : public Backtrace {
     }
     size_t bytes_available = buffer_.size() - offset;
 
-    if (do_partial_read_) {
+    if (bytes_partial_read_ > 0) {
       // Do a partial read.
       if (bytes > bytes_partial_read_) {
         bytes = bytes_partial_read_;
       }
       bytes_partial_read_ -= bytes;
-      // Only support a single partial read.
-      do_partial_read_ = false;
     } else if (bytes > bytes_available) {
       bytes = bytes_available;
     }
@@ -84,7 +82,6 @@ class BacktraceMock : public Backtrace {
     buffer_.resize(bytes);
     memcpy(buffer_.data(), buffer, bytes);
     bytes_partial_read_ = 0;
-    do_partial_read_ = false;
     last_read_addr_ = 0;
   }
 
@@ -93,14 +90,12 @@ class BacktraceMock : public Backtrace {
       abort();
     }
     bytes_partial_read_ = bytes;
-    do_partial_read_ = true;
   }
 
  private:
   std::vector<uint8_t> buffer_;
   size_t bytes_partial_read_ = 0;
   uintptr_t last_read_addr_ = 0;
-  bool do_partial_read_ = false;
 };
 
 #endif //  _DEBUGGERD_TEST_BACKTRACE_MOCK_H

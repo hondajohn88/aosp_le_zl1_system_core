@@ -600,7 +600,7 @@ int usb_device_control_transfer(struct usb_device *device,
 int usb_device_bulk_transfer(struct usb_device *device,
                             int endpoint,
                             void* buffer,
-                            unsigned int length,
+                            int length,
                             unsigned int timeout)
 {
     struct usbdevfs_bulktransfer  ctrl;
@@ -615,11 +615,6 @@ int usb_device_bulk_transfer(struct usb_device *device,
     ctrl.data = buffer;
     ctrl.timeout = timeout;
     return ioctl(device->fd, USBDEVFS_BULK, &ctrl);
-}
-
-int usb_device_reset(struct usb_device *device)
-{
-    return ioctl(device->fd, USBDEVFS_RESET);
 }
 
 struct usb_request *usb_request_new(struct usb_device *dev,

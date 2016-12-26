@@ -22,8 +22,10 @@
 
 class LogCommand : public FrameworkCommand {
 public:
-    explicit LogCommand(const char *cmd);
+    LogCommand(const char *cmd);
     virtual ~LogCommand() {}
 };
+
+bool clientHasLogCredentials(SocketClient * cli);
 
 #endif

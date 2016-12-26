@@ -17,10 +17,9 @@
 #ifndef ANDROID_STRING16_H
 #define ANDROID_STRING16_H
 
-#include <string> // for std::string
-
 #include <utils/Errors.h>
-#include <utils/String8.h>
+#include <utils/SharedBuffer.h>
+#include <utils/Unicode.h>
 #include <utils/TypeHelpers.h>
 
 // ---------------------------------------------------------------------------
@@ -35,7 +34,6 @@ namespace android {
 
 // ---------------------------------------------------------------------------
 
-class SharedBuffer;
 class String8;
 class TextOutput;
 
@@ -64,23 +62,24 @@ public:
     explicit                    String16(const char* o, size_t len);
 
                                 ~String16();
-
+    
     inline  const char16_t*     string() const;
-
-    static inline std::string   std_string(const String16& str);
-            size_t              size() const;
+    inline  size_t              size() const;
+    
+    inline  const SharedBuffer* sharedBuffer() const;
+    
             void                setTo(const String16& other);
             status_t            setTo(const char16_t* other);
             status_t            setTo(const char16_t* other, size_t len);
             status_t            setTo(const String16& other,
                                       size_t len,
                                       size_t begin=0);
-
+    
             status_t            append(const String16& other);
             status_t            append(const char16_t* other, size_t len);
-
+            
     inline  String16&           operator=(const String16& other);
-
+    
     inline  String16&           operator+=(const String16& other);
     inline  String16            operator+(const String16& other) const;
 
@@ -93,9 +92,7 @@ public:
 
             bool                startsWith(const String16& prefix) const;
             bool                startsWith(const char16_t* prefix) const;
-
-            bool                contains(const char16_t* chrs) const;
-
+            
             status_t            makeLower();
 
             status_t            replaceAll(char16_t replaceThis,
@@ -111,16 +108,16 @@ public:
     inline  bool                operator!=(const String16& other) const;
     inline  bool                operator>=(const String16& other) const;
     inline  bool                operator>(const String16& other) const;
-
+    
     inline  bool                operator<(const char16_t* other) const;
     inline  bool                operator<=(const char16_t* other) const;
     inline  bool                operator==(const char16_t* other) const;
     inline  bool                operator!=(const char16_t* other) const;
     inline  bool                operator>=(const char16_t* other) const;
     inline  bool                operator>(const char16_t* other) const;
-
+    
     inline                      operator const char16_t*() const;
-
+    
 private:
             const char16_t*     mString;
 };
@@ -147,9 +144,14 @@ inline const char16_t* String16::string() const
     return mString;
 }
 
-inline std::string String16::std_string(const String16& str)
+inline size_t String16::size() const
 {
-    return std::string(String8(str).string());
+    return SharedBuffer::sizeFromData(mString)/sizeof(char16_t)-1;
+}
+
+inline const SharedBuffer* String16::sharedBuffer() const
+{
+    return SharedBuffer::bufferFromData(mString);
 }
 
 inline String16& String16::operator=(const String16& other)

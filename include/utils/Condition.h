@@ -17,7 +17,6 @@
 #ifndef _LIBS_UTILS_CONDITION_H
 #define _LIBS_UTILS_CONDITION_H
 
-#include <limits.h>
 #include <stdint.h>
 #include <sys/types.h>
 #include <time.h>
@@ -55,7 +54,7 @@ public:
     };
 
     Condition();
-    explicit Condition(int type);
+    Condition(int type);
     ~Condition();
     // Wait on the condition variable.  Lock the mutex before calling.
     status_t wait(Mutex& mutex);
@@ -107,36 +106,30 @@ inline status_t Condition::wait(Mutex& mutex) {
     return -pthread_cond_wait(&mCond, &mutex.mMutex);
 }
 inline status_t Condition::waitRelative(Mutex& mutex, nsecs_t reltime) {
+#if defined(HAVE_PTHREAD_COND_TIMEDWAIT_RELATIVE)
+    struct timespec ts;
+    ts.tv_sec  = reltime/1000000000;
+    ts.tv_nsec = reltime%1000000000;
+    return -pthread_cond_timedwait_relative_np(&mCond, &mutex.mMutex, &ts);
+#else // HAVE_PTHREAD_COND_TIMEDWAIT_RELATIVE
     struct timespec ts;
 #if defined(__linux__)
     clock_gettime(CLOCK_REALTIME, &ts);
 #else // __APPLE__
-    // Apple doesn't support POSIX clocks.
+    // we don't support the clocks here.
     struct timeval t;
     gettimeofday(&t, NULL);
     ts.tv_sec = t.tv_sec;
-    ts.tv_nsec = t.tv_usec*1000;
+    ts.tv_nsec= t.tv_usec*1000;
 #endif
-
-    // On 32-bit devices, tv_sec is 32-bit, but `reltime` is 64-bit.
-    int64_t reltime_sec = reltime/1000000000;
-
-    ts.tv_nsec += static_cast<long>(reltime%1000000000);
-    if (reltime_sec < INT64_MAX && ts.tv_nsec >= 1000000000) {
+    ts.tv_sec += reltime/1000000000;
+    ts.tv_nsec+= reltime%1000000000;
+    if (ts.tv_nsec >= 1000000000) {
         ts.tv_nsec -= 1000000000;
-        ++reltime_sec;
+        ts.tv_sec  += 1;
     }
-
-    int64_t time_sec = ts.tv_sec;
-    if (time_sec > INT64_MAX - reltime_sec) {
-        time_sec = INT64_MAX;
-    } else {
-        time_sec += reltime_sec;
-    }
-
-    ts.tv_sec = (time_sec > LONG_MAX) ? LONG_MAX : static_cast<long>(time_sec);
-
     return -pthread_cond_timedwait(&mCond, &mutex.mMutex, &ts);
+#endif // HAVE_PTHREAD_COND_TIMEDWAIT_RELATIVE
 }
 inline void Condition::signal() {
     /*

@@ -27,6 +27,7 @@
 void reinit_signal_handler(int /*signal*/);
 
 class CommandListener : public FrameworkListener {
+    LogBuffer &mBuf;
 
 public:
     CommandListener(LogBuffer *buf, LogReader *reader, LogListener *swl);
@@ -36,11 +37,12 @@ private:
     static int getLogSocket();
 
     class ShutdownCmd : public LogCommand {
+        LogBuffer &mBuf;
         LogReader &mReader;
         LogListener &mSwl;
 
     public:
-        ShutdownCmd(LogReader *reader, LogListener *swl);
+        ShutdownCmd(LogBuffer *buf, LogReader *reader, LogListener *swl);
         virtual ~ShutdownCmd() {}
         int runCommand(SocketClient *c, int argc, char ** argv);
     };
@@ -49,41 +51,25 @@ private:
     class name##Cmd : public LogCommand {                        \
         LogBuffer &mBuf;                                         \
     public:                                                      \
-        explicit name##Cmd(LogBuffer *buf);                      \
+        name##Cmd(LogBuffer *buf);                               \
         virtual ~name##Cmd() {}                                  \
         int runCommand(SocketClient *c, int argc, char ** argv); \
-    }
+    };
 
-    LogBufferCmd(Clear);
-    LogBufferCmd(GetBufSize);
-    LogBufferCmd(SetBufSize);
-    LogBufferCmd(GetBufSizeUsed);
-    LogBufferCmd(GetStatistics);
-    LogBufferCmd(GetPruneList);
-    LogBufferCmd(SetPruneList);
+    LogBufferCmd(Clear)
+    LogBufferCmd(GetBufSize)
+    LogBufferCmd(SetBufSize)
+    LogBufferCmd(GetBufSizeUsed)
+    LogBufferCmd(GetStatistics)
+    LogBufferCmd(GetPruneList)
+    LogBufferCmd(SetPruneList)
 
-#define LogCmd(name)                                             \
-    class name##Cmd : public LogCommand {                        \
-    public:                                                      \
-        name##Cmd();                                             \
-        virtual ~name##Cmd() {}                                  \
-        int runCommand(SocketClient *c, int argc, char ** argv); \
-    }
-
-    LogCmd(Reinit);
-
-#define LogParentCmd(name)                                       \
-    class name##Cmd : public LogCommand {                        \
-        CommandListener &mParent;                                \
-    public:                                                      \
-        name##Cmd();                                             \
-        explicit name##Cmd(CommandListener *parent);             \
-        virtual ~name##Cmd() {}                                  \
-        int runCommand(SocketClient *c, int argc, char ** argv); \
-        void release(SocketClient *c) { mParent.release(c); }    \
-    }
-
-    LogParentCmd(Exit);
+    class ReinitCmd : public LogCommand {
+    public:
+        ReinitCmd();
+        virtual ~ReinitCmd() {}
+        int runCommand(SocketClient *c, int argc, char ** argv);
+    };
 
 };
 

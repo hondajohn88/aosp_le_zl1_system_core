@@ -18,8 +18,9 @@
 #include <iostream>
 
 #include <gtest/gtest.h>
-#include <hardware/hw_auth_token.h>
 #include <UniquePtr.h>
+
+#include <hardware/hw_auth_token.h>
 
 #include "../SoftGateKeeper.h"
 

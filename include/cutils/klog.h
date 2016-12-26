@@ -23,8 +23,10 @@
 
 __BEGIN_DECLS
 
+void klog_init(void);
 int  klog_get_level(void);
 void klog_set_level(int level);
+/* TODO: void klog_close(void); - and make klog_fd users thread safe. */
 
 void klog_write(int level, const char *fmt, ...)
     __attribute__ ((format(printf, 2, 3)));

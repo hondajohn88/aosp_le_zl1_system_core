@@ -16,10 +16,9 @@
  */
 
 #define LOG_TAG "dump_diskconfig"
-
 #include <stdio.h>
 
-#include <android/log.h>
+#include <cutils/log.h>
 
 #include "diskconfig.h"
 

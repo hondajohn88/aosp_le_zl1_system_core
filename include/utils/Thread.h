@@ -41,11 +41,11 @@ class Thread : virtual public RefBase
 public:
     // Create a Thread object, but doesn't create or start the associated
     // thread. See the run() method.
-    explicit            Thread(bool canCallJava = true);
+                        Thread(bool canCallJava = true);
     virtual             ~Thread();
 
     // Start the thread in threadLoop() which needs to be implemented.
-    virtual status_t    run(    const char* name,
+    virtual status_t    run(    const char* name = 0,
                                 int32_t priority = PRIORITY_DEFAULT,
                                 size_t stack = 0);
     
@@ -70,7 +70,7 @@ public:
     // Indicates whether this thread is running or not.
             bool        isRunning() const;
 
-#if defined(__ANDROID__)
+#ifdef HAVE_ANDROID_OS
     // Return the thread's kernel ID, same as the thread itself calling gettid(),
     // or -1 if the thread is not running.
             pid_t       getTid() const;
@@ -101,7 +101,7 @@ private:
     volatile bool           mExitPending;
     volatile bool           mRunning;
             sp<Thread>      mHoldSelf;
-#if defined(__ANDROID__)
+#ifdef HAVE_ANDROID_OS
     // legacy for debugging, not used by getTid() as it is set by the child thread
     // and so is not initialized until the child reaches that point
             pid_t           mTid;

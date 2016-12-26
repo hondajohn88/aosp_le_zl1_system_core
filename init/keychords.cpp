@@ -26,24 +26,23 @@
 #include "init.h"
 #include "log.h"
 #include "property_service.h"
-#include "service.h"
 
 static struct input_keychord *keychords = 0;
 static int keychords_count = 0;
 static int keychords_length = 0;
 static int keychord_fd = -1;
 
-void add_service_keycodes(Service* svc)
+void add_service_keycodes(struct service *svc)
 {
     struct input_keychord *keychord;
-    size_t i, size;
+    int i, size;
 
-    if (!svc->keycodes().empty()) {
+    if (svc->keycodes) {
         /* add a new keychord to the list */
-        size = sizeof(*keychord) + svc->keycodes().size() * sizeof(keychord->keycodes[0]);
+        size = sizeof(*keychord) + svc->nkeycodes * sizeof(keychord->keycodes[0]);
         keychords = (input_keychord*) realloc(keychords, keychords_length + size);
         if (!keychords) {
-            PLOG(ERROR) << "could not allocate keychords";
+            ERROR("could not allocate keychords\n");
             keychords_length = 0;
             keychords_count = 0;
             return;
@@ -52,11 +51,11 @@ void add_service_keycodes(Service* svc)
         keychord = (struct input_keychord *)((char *)keychords + keychords_length);
         keychord->version = KEYCHORD_VERSION;
         keychord->id = keychords_count + 1;
-        keychord->count = svc->keycodes().size();
-        svc->set_keychord_id(keychord->id);
+        keychord->count = svc->nkeycodes;
+        svc->keychord_id = keychord->id;
 
-        for (i = 0; i < svc->keycodes().size(); i++) {
-            keychord->keycodes[i] = svc->keycodes()[i];
+        for (i = 0; i < svc->nkeycodes; i++) {
+            keychord->keycodes[i] = svc->keycodes[i];
         }
         keychords_count++;
         keychords_length += size;
@@ -64,32 +63,32 @@ void add_service_keycodes(Service* svc)
 }
 
 static void handle_keychord() {
+    struct service *svc;
+    char adb_enabled[PROP_VALUE_MAX];
     int ret;
     __u16 id;
 
+    // Only handle keychords if adb is enabled.
+    property_get("init.svc.adbd", adb_enabled);
     ret = read(keychord_fd, &id, sizeof(id));
     if (ret != sizeof(id)) {
-        PLOG(ERROR) << "could not read keychord id";
+        ERROR("could not read keychord id\n");
         return;
     }
 
-    // Only handle keychords if adb is enabled.
-    std::string adb_enabled = property_get("init.svc.adbd");
-    if (adb_enabled == "running") {
-        Service* svc = ServiceManager::GetInstance().FindServiceByKeychord(id);
+    if (!strcmp(adb_enabled, "running")) {
+        svc = service_find_by_keychord(id);
         if (svc) {
-            LOG(INFO) << "Starting service " << svc->name() << " from keychord " << id;
-            svc->Start();
+            INFO("Starting service %s from keychord\n", svc->name);
+            service_start(svc, NULL);
         } else {
-            LOG(ERROR) << "Service for keychord " << id << " not found";
+            ERROR("service for keychord %d not found\n", id);
         }
-    } else {
-        LOG(WARNING) << "Not starting service for keychord " << id << " because ADB is disabled";
     }
 }
 
 void keychord_init() {
-    ServiceManager::GetInstance().ForEachService(add_service_keycodes);
+    service_for_each(add_service_keycodes);
 
     // Nothing to do if no services require keychords.
     if (!keychords) {
@@ -98,13 +97,13 @@ void keychord_init() {
 
     keychord_fd = TEMP_FAILURE_RETRY(open("/dev/keychord", O_RDWR | O_CLOEXEC));
     if (keychord_fd == -1) {
-        PLOG(ERROR) << "could not open /dev/keychord";
+        ERROR("could not open /dev/keychord: %s\n", strerror(errno));
         return;
     }
 
     int ret = write(keychord_fd, keychords, keychords_length);
     if (ret != keychords_length) {
-        PLOG(ERROR) << "could not configure /dev/keychord " << ret;
+        ERROR("could not configure /dev/keychord %d: %s\n", ret, strerror(errno));
         close(keychord_fd);
     }
 

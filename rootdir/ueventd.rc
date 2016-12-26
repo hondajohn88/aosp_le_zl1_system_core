@@ -1,13 +1,6 @@
 subsystem adf
 	devname uevent_devname
 
-# ueventd can only set permissions on device nodes and their associated
-# sysfs attributes, not on arbitrary paths.
-#
-# format for /dev rules: devname mode uid gid
-# format for /sys rules: nodename attr mode uid gid
-# shortcut: "mtd@NN" expands to "/dev/mtd/mtdNN"
-
 /dev/null                 0666   root       root
 /dev/zero                 0666   root       root
 /dev/full                 0666   root       root
@@ -19,7 +12,6 @@ subsystem adf
 /dev/hw_random            0440   root       system
 /dev/ashmem               0666   root       root
 /dev/binder               0666   root       root
-/dev/hwbinder             0666   root       root
 
 # Anyone can read the logs, but if they're not in the "logs"
 # group, then they'll only see log entries for their UID.
@@ -41,8 +33,8 @@ subsystem adf
 /dev/android_adb          0660   adb        adb
 /dev/android_adb_enable   0660   adb        adb
 /dev/ttyMSM0              0600   bluetooth  bluetooth
-/dev/uhid                 0660   system     bluetooth
-/dev/uinput               0660   system     bluetooth
+/dev/uhid                 0660   system     net_bt_stack
+/dev/uinput               0660   system     net_bt_stack
 /dev/alarm                0664   system     radio
 /dev/rtc0                 0640   system     system
 /dev/tty0                 0660   root       system

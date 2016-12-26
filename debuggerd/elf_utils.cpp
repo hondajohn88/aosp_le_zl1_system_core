@@ -23,13 +23,13 @@
 
 #include <string>
 
-#include <android/log.h>
-#include <android-base/stringprintf.h>
 #include <backtrace/Backtrace.h>
+#include <base/stringprintf.h>
+#include <log/log.h>
 
 #include "elf_utils.h"
 
-#define NOTE_ALIGN(size)  (((size) + 3) & ~3)
+#define NOTE_ALIGN(size)  ((size + 3) & ~3)
 
 template <typename HdrType, typename PhdrType, typename NhdrType>
 static bool get_build_id(

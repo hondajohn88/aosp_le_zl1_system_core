@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-#include <pthread.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <sys/types.h>
@@ -34,18 +33,14 @@
 // of maps using the same map cursor.
 //-------------------------------------------------------------------------
 UnwindMap::UnwindMap(pid_t pid) : BacktraceMap(pid) {
-  unw_map_cursor_clear(&map_cursor_);
 }
 
-UnwindMapRemote::UnwindMapRemote(pid_t pid) : UnwindMap(pid) {
-}
-
-UnwindMapRemote::~UnwindMapRemote() {
+UnwindMap::~UnwindMap() {
   unw_map_cursor_destroy(&map_cursor_);
   unw_map_cursor_clear(&map_cursor_);
 }
 
-bool UnwindMapRemote::GenerateMap() {
+bool UnwindMap::GenerateMap() {
   // Use the map_cursor information to construct the BacktraceMap data
   // rather than reparsing /proc/self/maps.
   unw_map_cursor_reset(&map_cursor_);
@@ -68,12 +63,11 @@ bool UnwindMapRemote::GenerateMap() {
   return true;
 }
 
-bool UnwindMapRemote::Build() {
+bool UnwindMap::Build() {
   return (unw_map_cursor_create(&map_cursor_, pid_) == 0) && GenerateMap();
 }
 
 UnwindMapLocal::UnwindMapLocal() : UnwindMap(getpid()), map_created_(false) {
-  pthread_rwlock_init(&map_lock_, nullptr);
 }
 
 UnwindMapLocal::~UnwindMapLocal() {
@@ -84,18 +78,12 @@ UnwindMapLocal::~UnwindMapLocal() {
 }
 
 bool UnwindMapLocal::GenerateMap() {
-  // Lock so that multiple threads cannot modify the maps data at the
-  // same time.
-  pthread_rwlock_wrlock(&map_lock_);
-
   // It's possible for the map to be regenerated while this loop is occurring.
   // If that happens, get the map again, but only try at most three times
   // before giving up.
-  bool generated = false;
   for (int i = 0; i < 3; i++) {
     maps_.clear();
 
-    // Save the map data retrieved so we can tell if it changes.
     unw_map_local_cursor_get(&map_cursor_);
 
     unw_map_t unw_map;
@@ -117,17 +105,12 @@ bool UnwindMapLocal::GenerateMap() {
     }
     // Check to see if the map changed while getting the data.
     if (ret != -UNW_EINVAL) {
-      generated = true;
-      break;
+      return true;
     }
   }
 
-  pthread_rwlock_unlock(&map_lock_);
-
-  if (!generated) {
-    BACK_LOGW("Unable to generate the map.");
-  }
-  return generated;
+  BACK_LOGW("Unable to generate the map.");
+  return false;
 }
 
 bool UnwindMapLocal::Build() {
@@ -159,7 +142,7 @@ BacktraceMap* BacktraceMap::Create(pid_t pid, bool uncached) {
   } else if (pid == getpid()) {
     map = new UnwindMapLocal();
   } else {
-    map = new UnwindMapRemote(pid);
+    map = new UnwindMap(pid);
   }
   if (!map->Build()) {
     delete map;

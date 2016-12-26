@@ -18,7 +18,6 @@
 #define _FILE_OFFSET_BITS 64
 #define _LARGEFILE64_SOURCE 1
 
-#include <inttypes.h>
 #include <fcntl.h>
 #include <stdarg.h>
 #include <stdbool.h>
@@ -79,7 +78,7 @@ static void verbose_error(bool verbose, int err, const char *fmt, ...)
 		s = " at ";
 	}
 	if (verbose) {
-#ifndef _WIN32
+#ifndef USE_MINGW
 		if (err == -EOVERFLOW) {
 			sparse_print_verbose("EOF while reading file%s%s\n", s, at);
 		} else
@@ -199,7 +198,7 @@ static int process_skip_chunk(struct sparse_file *s, unsigned int chunk_size,
 	return 0;
 }
 
-static int process_crc32_chunk(int fd, unsigned int chunk_size, uint32_t *crc32)
+static int process_crc32_chunk(int fd, unsigned int chunk_size, uint32_t crc32)
 {
 	uint32_t file_crc32;
 	int ret;
@@ -213,7 +212,7 @@ static int process_crc32_chunk(int fd, unsigned int chunk_size, uint32_t *crc32)
 		return ret;
 	}
 
-	if (crc32 != NULL && file_crc32 != *crc32) {
+	if (file_crc32 != crc32) {
 		return -EINVAL;
 	}
 
@@ -234,7 +233,7 @@ static int process_chunk(struct sparse_file *s, int fd, off64_t offset,
 			ret = process_raw_chunk(s, chunk_data_size, fd, offset,
 					chunk_header->chunk_sz, cur_block, crc_ptr);
 			if (ret < 0) {
-				verbose_error(s->verbose, ret, "data block at %" PRId64, offset);
+				verbose_error(s->verbose, ret, "data block at %lld", offset);
 				return ret;
 			}
 			return chunk_header->chunk_sz;
@@ -242,7 +241,7 @@ static int process_chunk(struct sparse_file *s, int fd, off64_t offset,
 			ret = process_fill_chunk(s, chunk_data_size, fd,
 					chunk_header->chunk_sz, cur_block, crc_ptr);
 			if (ret < 0) {
-				verbose_error(s->verbose, ret, "fill block at %" PRId64, offset);
+				verbose_error(s->verbose, ret, "fill block at %lld", offset);
 				return ret;
 			}
 			return chunk_header->chunk_sz;
@@ -251,21 +250,21 @@ static int process_chunk(struct sparse_file *s, int fd, off64_t offset,
 					chunk_header->chunk_sz, cur_block, crc_ptr);
 			if (chunk_data_size != 0) {
 				if (ret < 0) {
-					verbose_error(s->verbose, ret, "skip block at %" PRId64, offset);
+					verbose_error(s->verbose, ret, "skip block at %lld", offset);
 					return ret;
 				}
 			}
 			return chunk_header->chunk_sz;
 		case CHUNK_TYPE_CRC32:
-			ret = process_crc32_chunk(fd, chunk_data_size, crc_ptr);
+			ret = process_crc32_chunk(fd, chunk_data_size, *crc_ptr);
 			if (ret < 0) {
-				verbose_error(s->verbose, -EINVAL, "crc block at %" PRId64,
+				verbose_error(s->verbose, -EINVAL, "crc block at %lld",
 						offset);
 				return ret;
 			}
 			return 0;
 		default:
-			verbose_error(s->verbose, -EINVAL, "unknown block %04X at %" PRId64,
+			verbose_error(s->verbose, -EINVAL, "unknown block %04X at %lld",
 					chunk_header->chunk_type, offset);
 	}
 
@@ -374,7 +373,6 @@ static int sparse_file_read_normal(struct sparse_file *s, int fd)
 		ret = read_all(fd, buf, to_read);
 		if (ret < 0) {
 			error("failed to read sparse file");
-			free(buf);
 			return ret;
 		}
 
@@ -402,7 +400,6 @@ static int sparse_file_read_normal(struct sparse_file *s, int fd)
 		block++;
 	}
 
-	free(buf);
 	return 0;
 }
 

@@ -26,16 +26,15 @@
 #include <utils/Mutex.h>
 #include <utils/String16.h>
 
-#include <healthd/healthd.h>
+#include "healthd.h"
 
 namespace android {
 
-void BatteryPropertiesRegistrar::publish(
-    const sp<BatteryPropertiesRegistrar>& service) {
-    defaultServiceManager()->addService(String16("batteryproperties"), service);
+void BatteryPropertiesRegistrar::publish() {
+    defaultServiceManager()->addService(String16("batteryproperties"), this);
 }
 
-void BatteryPropertiesRegistrar::notifyListeners(const struct BatteryProperties& props) {
+void BatteryPropertiesRegistrar::notifyListeners(struct BatteryProperties props) {
     Mutex::Autolock _l(mRegistrationLock);
     for (size_t i = 0; i < mListeners.size(); i++) {
         mListeners[i]->batteryPropertiesChanged(props);

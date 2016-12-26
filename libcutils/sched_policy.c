@@ -23,8 +23,8 @@
 #include <string.h>
 #include <unistd.h>
 
-#include <log/log.h>
 #include <cutils/sched_policy.h>
+#include <log/log.h>
 
 #define UNUSED __attribute__((__unused__))
 
@@ -37,13 +37,16 @@ static inline SchedPolicy _policy(SchedPolicy p)
    return p == SP_DEFAULT ? SP_SYSTEM_DEFAULT : p;
 }
 
-#if defined(__ANDROID__)
+#if defined(HAVE_ANDROID_OS)
 
 #include <pthread.h>
 #include <sched.h>
 #include <sys/prctl.h>
 
 #define POLICY_DEBUG 0
+
+// This prctl is only available in Android kernels.
+#define PR_SET_TIMERSLACK_PID 41
 
 // timer slack value in nS enforced when the thread moves to background
 #define TIMER_SLACK_BG 40000000
@@ -52,24 +55,14 @@ static inline SchedPolicy _policy(SchedPolicy p)
 static pthread_once_t the_once = PTHREAD_ONCE_INIT;
 
 static int __sys_supports_schedgroups = -1;
-static int __sys_supports_timerslack = -1;
 
 // File descriptors open to /dev/cpuctl/../tasks, setup by initialize, or -1 on error.
 static int bg_cgroup_fd = -1;
 static int fg_cgroup_fd = -1;
 
-#ifdef USE_CPUSETS
 // File descriptors open to /dev/cpuset/../tasks, setup by initialize, or -1 on error
-static int system_bg_cpuset_fd = -1;
 static int bg_cpuset_fd = -1;
 static int fg_cpuset_fd = -1;
-static int ta_cpuset_fd = -1; // special cpuset for top app
-#endif
-
-// File descriptors open to /dev/stune/../tasks, setup by initialize, or -1 on error
-static int bg_schedboost_fd = -1;
-static int fg_schedboost_fd = -1;
-static int ta_schedboost_fd = -1;
 
 /* Add tid to the scheduling group defined by the policy */
 static int add_tid_to_cgroup(int tid, int fd)
@@ -108,7 +101,7 @@ static int add_tid_to_cgroup(int tid, int fd)
 
 static void __initialize(void) {
     char* filename;
-    if (!access("/dev/cpuctl/tasks", W_OK)) {
+    if (!access("/dev/cpuctl/tasks", F_OK)) {
         __sys_supports_schedgroups = 1;
 
         filename = "/dev/cpuctl/tasks";
@@ -127,35 +120,19 @@ static void __initialize(void) {
     }
 
 #ifdef USE_CPUSETS
-    if (!access("/dev/cpuset/tasks", W_OK)) {
+    if (!access("/dev/cpuset/tasks", F_OK)) {
 
         filename = "/dev/cpuset/foreground/tasks";
         fg_cpuset_fd = open(filename, O_WRONLY | O_CLOEXEC);
         filename = "/dev/cpuset/background/tasks";
         bg_cpuset_fd = open(filename, O_WRONLY | O_CLOEXEC);
-        filename = "/dev/cpuset/system-background/tasks";
-        system_bg_cpuset_fd = open(filename, O_WRONLY | O_CLOEXEC);
-        filename = "/dev/cpuset/top-app/tasks";
-        ta_cpuset_fd = open(filename, O_WRONLY | O_CLOEXEC);
-
-#ifdef USE_SCHEDBOOST
-        filename = "/dev/stune/top-app/tasks";
-        ta_schedboost_fd = open(filename, O_WRONLY | O_CLOEXEC);
-        filename = "/dev/stune/foreground/tasks";
-        fg_schedboost_fd = open(filename, O_WRONLY | O_CLOEXEC);
-        filename = "/dev/stune/background/tasks";
-        bg_schedboost_fd = open(filename, O_WRONLY | O_CLOEXEC);
-#endif
     }
 #endif
 
-    char buf[64];
-    snprintf(buf, sizeof(buf), "/proc/%d/timerslack_ns", getpid());
-    __sys_supports_timerslack = !access(buf, W_OK);
 }
 
 /*
- * Returns the path under the requested cgroup subsystem (if it exists)
+ * Try to get the scheduler group.
  *
  * The data from /proc/<pid>/cgroup looks (something) like:
  *  2:cpu:/bg_non_interactive
@@ -165,21 +142,21 @@ static void __initialize(void) {
  * the default cgroup.  If the string is longer than "bufLen", the string
  * will be truncated.
  */
-static int getCGroupSubsys(int tid, const char* subsys, char* buf, size_t bufLen)
+static int getSchedulerGroup(int tid, char* buf, size_t bufLen)
 {
-#if defined(__ANDROID__)
+#ifdef HAVE_ANDROID_OS
     char pathBuf[32];
     char lineBuf[256];
     FILE *fp;
 
     snprintf(pathBuf, sizeof(pathBuf), "/proc/%d/cgroup", tid);
-    if (!(fp = fopen(pathBuf, "re"))) {
+    if (!(fp = fopen(pathBuf, "r"))) {
         return -1;
     }
 
     while(fgets(lineBuf, sizeof(lineBuf) -1, fp)) {
         char *next = lineBuf;
-        char *found_subsys;
+        char *subsys;
         char *grp;
         size_t len;
 
@@ -188,11 +165,11 @@ static int getCGroupSubsys(int tid, const char* subsys, char* buf, size_t bufLen
             goto out_bad_data;
         }
 
-        if (!(found_subsys = strsep(&next, ":"))) {
+        if (!(subsys = strsep(&next, ":"))) {
             goto out_bad_data;
         }
 
-        if (strcmp(found_subsys, subsys)) {
+        if (strcmp(subsys, "cpu")) {
             /* Not the subsys we're looking for */
             continue;
         }
@@ -213,7 +190,7 @@ static int getCGroupSubsys(int tid, const char* subsys, char* buf, size_t bufLen
         return 0;
     }
 
-    SLOGE("Failed to find subsys %s", subsys);
+    SLOGE("Failed to find cpu subsys");
     fclose(fp);
     return -1;
  out_bad_data:
@@ -235,23 +212,7 @@ int get_sched_policy(int tid, SchedPolicy *policy)
 
     if (__sys_supports_schedgroups) {
         char grpBuf[32];
-#ifdef USE_CPUSETS
-        if (getCGroupSubsys(tid, "cpuset", grpBuf, sizeof(grpBuf)) < 0)
-            return -1;
-        if (grpBuf[0] == '\0') {
-            *policy = SP_FOREGROUND;
-        } else if (!strcmp(grpBuf, "foreground")) {
-            *policy = SP_FOREGROUND;
-        } else if (!strcmp(grpBuf, "background")) {
-            *policy = SP_BACKGROUND;
-        } else if (!strcmp(grpBuf, "top-app")) {
-            *policy = SP_TOP_APP;
-        } else {
-            errno = ERANGE;
-            return -1;
-        }
-#else
-        if (getCGroupSubsys(tid, "cpu", grpBuf, sizeof(grpBuf)) < 0)
+        if (getSchedulerGroup(tid, grpBuf, sizeof(grpBuf)) < 0)
             return -1;
         if (grpBuf[0] == '\0') {
             *policy = SP_FOREGROUND;
@@ -261,7 +222,6 @@ int get_sched_policy(int tid, SchedPolicy *policy)
             errno = ERANGE;
             return -1;
         }
-#endif
     } else {
         int rc = sched_getscheduler(tid);
         if (rc < 0)
@@ -290,28 +250,18 @@ int set_cpuset_policy(int tid, SchedPolicy policy)
     policy = _policy(policy);
     pthread_once(&the_once, __initialize);
 
-    int fd = -1;
-    int boost_fd = -1;
+    int fd;
     switch (policy) {
     case SP_BACKGROUND:
         fd = bg_cpuset_fd;
-        boost_fd = bg_schedboost_fd;
         break;
     case SP_FOREGROUND:
     case SP_AUDIO_APP:
     case SP_AUDIO_SYS:
         fd = fg_cpuset_fd;
-        boost_fd = fg_schedboost_fd;
-        break;
-    case SP_TOP_APP :
-        fd = ta_cpuset_fd;
-        boost_fd = ta_schedboost_fd;
-        break;
-    case SP_SYSTEM:
-        fd = system_bg_cpuset_fd;
         break;
     default:
-        boost_fd = fd = -1;
+        fd = -1;
         break;
     }
 
@@ -320,31 +270,8 @@ int set_cpuset_policy(int tid, SchedPolicy policy)
             return -errno;
     }
 
-#ifdef USE_SCHEDBOOST
-    if (boost_fd > 0 && add_tid_to_cgroup(tid, boost_fd) != 0) {
-        if (errno != ESRCH && errno != ENOENT)
-            return -errno;
-    }
-#endif
-
     return 0;
 #endif
-}
-
-static void set_timerslack_ns(int tid, unsigned long long slack) {
-    // v4.6+ kernels support the /proc/<tid>/timerslack_ns interface.
-    // TODO: once we've backported this, log if the open(2) fails.
-    char buf[64];
-    snprintf(buf, sizeof(buf), "/proc/%d/timerslack_ns", tid);
-    int fd = open(buf, O_WRONLY | O_CLOEXEC);
-    if (fd != -1) {
-        int len = snprintf(buf, sizeof(buf), "%llu", slack);
-        if (write(fd, buf, len) != len) {
-            SLOGE("set_timerslack_ns write failed: %s\n", strerror(errno));
-        }
-        close(fd);
-        return;
-    }
 }
 
 int set_sched_policy(int tid, SchedPolicy policy)
@@ -359,11 +286,12 @@ int set_sched_policy(int tid, SchedPolicy policy)
     char statfile[64];
     char statline[1024];
     char thread_name[255];
+    int fd;
 
-    snprintf(statfile, sizeof(statfile), "/proc/%d/stat", tid);
+    sprintf(statfile, "/proc/%d/stat", tid);
     memset(thread_name, 0, sizeof(thread_name));
 
-    int fd = open(statfile, O_RDONLY | O_CLOEXEC);
+    fd = open(statfile, O_RDONLY);
     if (fd >= 0) {
         int rc = read(fd, statline, 1023);
         close(fd);
@@ -384,7 +312,6 @@ int set_sched_policy(int tid, SchedPolicy policy)
     case SP_FOREGROUND:
     case SP_AUDIO_APP:
     case SP_AUDIO_SYS:
-    case SP_TOP_APP:
         SLOGD("^^^ tid %d (%s)", tid, thread_name);
         break;
     case SP_SYSTEM:
@@ -397,26 +324,18 @@ int set_sched_policy(int tid, SchedPolicy policy)
 #endif
 
     if (__sys_supports_schedgroups) {
-        int fd = -1;
-        int boost_fd = -1;
+        int fd;
         switch (policy) {
         case SP_BACKGROUND:
             fd = bg_cgroup_fd;
-            boost_fd = bg_schedboost_fd;
             break;
         case SP_FOREGROUND:
         case SP_AUDIO_APP:
         case SP_AUDIO_SYS:
             fd = fg_cgroup_fd;
-            boost_fd = fg_schedboost_fd;
-            break;
-        case SP_TOP_APP:
-            fd = fg_cgroup_fd;
-            boost_fd = ta_schedboost_fd;
             break;
         default:
             fd = -1;
-            boost_fd = -1;
             break;
         }
 
@@ -425,13 +344,6 @@ int set_sched_policy(int tid, SchedPolicy policy)
             if (errno != ESRCH && errno != ENOENT)
                 return -errno;
         }
-
-#ifdef USE_SCHEDBOOST
-        if (boost_fd > 0 && add_tid_to_cgroup(tid, boost_fd) != 0) {
-            if (errno != ESRCH && errno != ENOENT)
-                return -errno;
-        }
-#endif
     } else {
         struct sched_param param;
 
@@ -442,10 +354,8 @@ int set_sched_policy(int tid, SchedPolicy policy)
                            &param);
     }
 
-    if (__sys_supports_timerslack) {
-        set_timerslack_ns(tid, policy == SP_BACKGROUND ?
-                               TIMER_SLACK_BG : TIMER_SLACK_FG);
-    }
+    prctl(PR_SET_TIMERSLACK_PID,
+          policy == SP_BACKGROUND ? TIMER_SLACK_BG : TIMER_SLACK_FG, tid);
 
     return 0;
 }
@@ -476,7 +386,6 @@ const char *get_sched_policy_name(SchedPolicy policy)
        [SP_SYSTEM]     = "  ",
        [SP_AUDIO_APP]  = "aa",
        [SP_AUDIO_SYS]  = "as",
-       [SP_TOP_APP]    = "ta",
     };
     if ((policy < SP_CNT) && (strings[policy] != NULL))
         return strings[policy];

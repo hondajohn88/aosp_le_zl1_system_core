@@ -19,33 +19,6 @@
 ** by the device side of adb.
 */
 
-/*
- * This file is consumed by build/tools/fs_config and is used
- * for generating various files. Anything #define AID_<name>
- * becomes the mapping for getpwnam/getpwuid, etc. The <name>
- * field is lowercased.
- * For example:
- * #define AID_FOO_BAR 6666 becomes a friendly name of "foo_bar"
- *
- * The above holds true with the exception of:
- *   mediacodec
- *   mediaex
- *   mediadrm
- * Whose friendly names do not match the #define statements.
- *
- * Additionally, AID_OEM_RESERVED_START and AID_OEM_RESERVED_END
- * can be used to define reserved OEM ranges used for sanity checks
- * during the build process. The rules are, they must end with START/END
- * The proper convention is incrementing a number like so:
- * AID_OEM_RESERVED_START
- * AID_OEM_RESERVED_1_START
- * AID_OEM_RESERVED_2_START
- * ...
- * The same applies to the END.
- * They are not required to be in order, but must not overlap each other and
- * must define a START and END'ing range. START must be smaller than END.
- */
-
 #ifndef _ANDROID_FILESYSTEM_CONFIG_H_
 #define _ANDROID_FILESYSTEM_CONFIG_H_
 
@@ -53,13 +26,11 @@
 #include <sys/types.h>
 #include <stdint.h>
 
-#if defined(__ANDROID__)
+#ifdef HAVE_ANDROID_OS
 #include <linux/capability.h>
 #else
 #include "android_filesystem_capability.h"
 #endif
-
-#define CAP_MASK_LONG(cap_name)  (1ULL << (cap_name))
 
 /* This is the master Users and Groups config for the platform.
  * DO NOT EVER RENUMBER
@@ -106,27 +77,6 @@
 #define AID_SDCARD_ALL    1035  /* access all users external storage */
 #define AID_LOGD          1036  /* log daemon */
 #define AID_SHARED_RELRO  1037  /* creator of shared GNU RELRO files */
-#define AID_DBUS          1038  /* dbus-daemon IPC broker process */
-#define AID_TLSDATE       1039  /* tlsdate unprivileged user */
-#define AID_MEDIA_EX      1040  /* mediaextractor process */
-#define AID_AUDIOSERVER   1041  /* audioserver process */
-#define AID_METRICS_COLL  1042  /* metrics_collector process */
-#define AID_METRICSD      1043  /* metricsd process */
-#define AID_WEBSERV       1044  /* webservd process */
-#define AID_DEBUGGERD     1045  /* debuggerd unprivileged user */
-#define AID_MEDIA_CODEC   1046  /* mediacodec process */
-#define AID_CAMERASERVER  1047  /* cameraserver process */
-#define AID_FIREWALL      1048  /* firewalld process */
-#define AID_TRUNKS        1049  /* trunksd process (TPM daemon) */
-#define AID_NVRAM         1050  /* Access-controlled NVRAM */
-#define AID_DNS           1051  /* DNS resolution daemon (system: netd) */
-#define AID_DNS_TETHER    1052  /* DNS resolution daemon (tether: dnsmasq) */
-#define AID_WEBVIEW_ZYGOTE 1053 /* WebView zygote process */
-#define AID_VEHICLE_NETWORK 1054 /* Vehicle network service */
-#define AID_MEDIA_AUDIO   1055 /* GID for audio files on internal media storage */
-#define AID_MEDIA_VIDEO   1056 /* GID for video files on internal media storage */
-#define AID_MEDIA_IMAGE   1057 /* GID for image files on internal media storage */
-/* Changes to this file must be made in AOSP, *not* in internal branches. */
 
 #define AID_SHELL         2000  /* adb and debug shell user */
 #define AID_CACHE         2001  /* cache access */
@@ -146,32 +96,21 @@
 #define AID_NET_ADMIN     3005  /* can configure interfaces and routing tables. */
 #define AID_NET_BW_STATS  3006  /* read bandwidth statistics */
 #define AID_NET_BW_ACCT   3007  /* change bandwidth statistics accounting */
-#define AID_READPROC      3009  /* Allow /proc read access */
-#define AID_WAKELOCK      3010  /* Allow system wakelock read/write access */
-
-/* The range 5000-5999 is also reserved for OEM, and must never be used here. */
-#define AID_OEM_RESERVED_2_START 5000
-#define AID_OEM_RESERVED_2_END   5999
+#define AID_NET_BT_STACK  3008  /* bluetooth: access config files */
 
 #define AID_EVERYBODY     9997  /* shared between all apps in the same profile */
 #define AID_MISC          9998  /* access to misc storage */
 #define AID_NOBODY        9999
 
-#define AID_APP              10000 /* TODO: switch users over to AID_APP_START */
-#define AID_APP_START        10000 /* first app user */
-#define AID_APP_END          19999 /* last app user */
+#define AID_APP          10000  /* first app user */
 
-#define AID_CACHE_GID_START  20000 /* start of gids for apps to mark cached data */
-#define AID_CACHE_GID_END    29999 /* end of gids for apps to mark cached data */
+#define AID_ISOLATED_START 99000 /* start of uids for fully isolated sandboxed processes */
+#define AID_ISOLATED_END   99999 /* end of uids for fully isolated sandboxed processes */
+
+#define AID_USER        100000  /* offset for uid ranges for each user */
 
 #define AID_SHARED_GID_START 50000 /* start of gids for apps in each user to share */
-#define AID_SHARED_GID_END   59999 /* end of gids for apps in each user to share */
-
-#define AID_ISOLATED_START   99000 /* start of uids for fully isolated sandboxed processes */
-#define AID_ISOLATED_END     99999 /* end of uids for fully isolated sandboxed processes */
-
-#define AID_USER            100000 /* TODO: switch users over to AID_USER_OFFSET */
-#define AID_USER_OFFSET     100000 /* offset for uid ranges for each user */
+#define AID_SHARED_GID_END   59999 /* start of gids for apps in each user to share */
 
 #if !defined(EXCLUDE_FS_CONFIG_STRUCTURES)
 /*
@@ -229,26 +168,6 @@ static const struct android_id_info android_ids[] = {
     { "sdcard_all",    AID_SDCARD_ALL, },
     { "logd",          AID_LOGD, },
     { "shared_relro",  AID_SHARED_RELRO, },
-    { "dbus",          AID_DBUS, },
-    { "tlsdate",       AID_TLSDATE, },
-    { "mediaex",       AID_MEDIA_EX, },
-    { "audioserver",   AID_AUDIOSERVER, },
-    { "metrics_coll",  AID_METRICS_COLL },
-    { "metricsd",      AID_METRICSD },
-    { "webserv",       AID_WEBSERV },
-    { "debuggerd",     AID_DEBUGGERD, },
-    { "mediacodec",    AID_MEDIA_CODEC, },
-    { "cameraserver",  AID_CAMERASERVER, },
-    { "firewall",      AID_FIREWALL, },
-    { "trunks",        AID_TRUNKS, },
-    { "nvram",         AID_NVRAM, },
-    { "dns",           AID_DNS, },
-    { "dns_tether",    AID_DNS_TETHER, },
-    { "webview_zygote", AID_WEBVIEW_ZYGOTE, },
-    { "vehicle_network", AID_VEHICLE_NETWORK, },
-    { "media_audio",   AID_MEDIA_AUDIO, },
-    { "media_video",   AID_MEDIA_VIDEO, },
-    { "media_image",   AID_MEDIA_IMAGE, },
 
     { "shell",         AID_SHELL, },
     { "cache",         AID_CACHE, },
@@ -261,8 +180,7 @@ static const struct android_id_info android_ids[] = {
     { "net_admin",     AID_NET_ADMIN, },
     { "net_bw_stats",  AID_NET_BW_STATS, },
     { "net_bw_acct",   AID_NET_BW_ACCT, },
-    { "readproc",      AID_READPROC, },
-    { "wakelock",      AID_WAKELOCK, },
+    { "net_bt_stack",  AID_NET_BT_STACK, },
 
     { "everybody",     AID_EVERYBODY, },
     { "misc",          AID_MISC, },

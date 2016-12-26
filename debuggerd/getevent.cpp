@@ -14,23 +14,19 @@
  * limitations under the License.
  */
 
-#include <dirent.h>
-#include <errno.h>
-#include <fcntl.h>
-#include <linux/input.h>
-#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/inotify.h>
+#include <stdint.h>
+#include <dirent.h>
+#include <fcntl.h>
 #include <sys/ioctl.h>
+#include <sys/inotify.h>
 #include <sys/limits.h>
 #include <sys/poll.h>
-#include <unistd.h>
-
-#include <memory>
-
-#include <android/log.h>
+#include <linux/input.h>
+#include <errno.h>
+#include <cutils/log.h>
 
 static struct pollfd* ufds;
 static char** device_names;
@@ -147,20 +143,22 @@ static int read_notify(const char* dirname, int nfd) {
 static int scan_dir(const char* dirname) {
   char devname[PATH_MAX];
   char* filename;
+  DIR* dir;
   struct dirent* de;
-  std::unique_ptr<DIR, decltype(&closedir)> dir(opendir(dirname), closedir);
+  dir = opendir(dirname);
   if (dir == NULL)
     return -1;
   strcpy(devname, dirname);
   filename = devname + strlen(devname);
   *filename++ = '/';
-  while ((de = readdir(dir.get()))) {
+  while ((de = readdir(dir))) {
     if ((de->d_name[0] == '.' && de->d_name[1] == '\0') ||
         (de->d_name[1] == '.' && de->d_name[2] == '\0'))
       continue;
     strcpy(filename, de->d_name);
     open_device(devname);
   }
+  closedir(dir);
   return 0;
 }
 

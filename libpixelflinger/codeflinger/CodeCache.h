@@ -19,7 +19,6 @@
 #ifndef ANDROID_CODECACHE_H
 #define ANDROID_CODECACHE_H
 
-#include <atomic>
 #include <stdint.h>
 #include <pthread.h>
 #include <sys/types.h>
@@ -43,7 +42,7 @@ template  <typename T>
 class AssemblyKey : public AssemblyKeyBase
 {
 public:
-    explicit AssemblyKey(const T& rhs) : mKey(rhs) { }
+    AssemblyKey(const T& rhs) : mKey(rhs) { }
     virtual int compare_type(const AssemblyKeyBase& key) const {
         const T& rhs = static_cast<const AssemblyKey&>(key).mKey;
         return android::compare_type(mKey, rhs);
@@ -57,7 +56,7 @@ private:
 class Assembly
 {
 public:
-    explicit    Assembly(size_t size);
+                Assembly(size_t size);
     virtual     ~Assembly();
 
     ssize_t     size() const;
@@ -70,7 +69,7 @@ public:
     typedef void    weakref_type;
 
 private:
-    mutable std::atomic<int32_t>     mCount;
+    mutable int32_t     mCount;
             uint32_t*   mBase;
             size_t      mSize;
 };
@@ -81,13 +80,13 @@ class CodeCache
 {
 public:
 // pretty simple cache API...
-    explicit            CodeCache(size_t size);
-                        ~CodeCache();
+                CodeCache(size_t size);
+                ~CodeCache();
+    
+            sp<Assembly>        lookup(const AssemblyKeyBase& key) const;
 
-    sp<Assembly>        lookup(const AssemblyKeyBase& key) const;
-
-    int                 cache(const AssemblyKeyBase& key,
-                              const sp<Assembly>& assembly);
+            int                 cache(  const AssemblyKeyBase& key,
+                                        const sp<Assembly>& assembly);
 
 private:
     // nothing to see here...
@@ -106,7 +105,7 @@ private:
         const AssemblyKeyBase* mKey;
     public:
         key_t() { };
-        explicit key_t(const AssemblyKeyBase& k) : mKey(&k)  { }
+        key_t(const AssemblyKeyBase& k) : mKey(&k)  { }
     };
 
     mutable pthread_mutex_t             mLock;

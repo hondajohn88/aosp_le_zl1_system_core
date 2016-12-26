@@ -2,26 +2,22 @@
 **
 ** Copyright 2006, The Android Open Source Project
 **
-** Licensed under the Apache License, Version 2.0 (the "License");
-** you may not use this file except in compliance with the License.
-** You may obtain a copy of the License at
+** Licensed under the Apache License, Version 2.0 (the "License"); 
+** you may not use this file except in compliance with the License. 
+** You may obtain a copy of the License at 
 **
-**     http://www.apache.org/licenses/LICENSE-2.0
+**     http://www.apache.org/licenses/LICENSE-2.0 
 **
-** Unless required by applicable law or agreed to in writing, software
-** distributed under the License is distributed on an "AS IS" BASIS,
-** WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-** See the License for the specific language governing permissions and
+** Unless required by applicable law or agreed to in writing, software 
+** distributed under the License is distributed on an "AS IS" BASIS, 
+** WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
+** See the License for the specific language governing permissions and 
 ** limitations under the License.
 */
 
-#define LOG_TAG "pixelflinger-code"
-
 #include <assert.h>
 #include <stdio.h>
-
-#include <android/log.h>
-
+#include <cutils/log.h>
 #include "GGLAssembler.h"
 
 namespace android {
@@ -29,7 +25,7 @@ namespace android {
 // ----------------------------------------------------------------------------
 
 void GGLAssembler::store(const pointer_t& addr, const pixel_t& s, uint32_t flags)
-{
+{    
     const int bits = addr.size;
     const int inc = (flags & WRITE_BACK)?1:0;
     switch (bits) {
@@ -63,8 +59,8 @@ void GGLAssembler::store(const pointer_t& addr, const pixel_t& s, uint32_t flags
 }
 
 void GGLAssembler::load(const pointer_t& addr, const pixel_t& s, uint32_t flags)
-{
-    Scratch scratches(registerFile());
+{    
+    Scratch scratches(registerFile());    
     int s0;
 
     const int bits = addr.size;
@@ -76,7 +72,7 @@ void GGLAssembler::load(const pointer_t& addr, const pixel_t& s, uint32_t flags)
         break;
     case 24:
         // 24 bits formats are a little special and used only for RGB
-        // R,G,B is packed as 0x00BBGGRR
+        // R,G,B is packed as 0x00BBGGRR 
         s0 = scratches.obtain();
         if (s.reg != addr.reg) {
             LDRB(AL, s.reg, addr.reg, immed12_pre(0));      // R
@@ -94,7 +90,7 @@ void GGLAssembler::load(const pointer_t& addr, const pixel_t& s, uint32_t flags)
         }
         if (inc)
             ADD(AL, 0, addr.reg, addr.reg, imm(3));
-        break;
+        break;        
     case 16:
         if (inc)    LDRH(AL, s.reg, addr.reg, immed8_post(2));
         else        LDRH(AL, s.reg, addr.reg);
@@ -116,7 +112,7 @@ void GGLAssembler::extract(integer_t& d, int s, int h, int l, int bits)
     assert(maskLen<=8);
 #endif
     assert(h);
-
+    
     if (h != bits) {
         const int mask = ((1<<maskLen)-1) << l;
         if (isValidImmediate(mask)) {
@@ -130,12 +126,12 @@ void GGLAssembler::extract(integer_t& d, int s, int h, int l, int bits)
         }
         s = d.reg;
     }
-
+    
     if (l) {
         MOV(AL, 0, d.reg, reg_imm(s, LSR, l));  // component = packed >> l;
         s = d.reg;
     }
-
+    
     if (s != d.reg) {
         MOV(AL, 0, d.reg, s);
     }
@@ -216,12 +212,12 @@ void GGLAssembler::expand(integer_t& dst, const integer_t& src, int dbits)
         } while(dbits>0);
         return;
     }
-
+    
     dbits -= sbits;
     do {
         ORR(AL, 0, d, s, reg_imm(s, LSL, sbits));
             // d |= d<<sbits;
-        s = d;
+        s = d;        
         dbits -= sbits;
         if (sbits*2 < dbits) {
             sbits *= 2;
@@ -245,14 +241,14 @@ void GGLAssembler::downshift(
     int dl = d.format.c[component].l;
     int dbits = dh - dl;
     int dithering = 0;
-
+    
     ALOGE_IF(sbits<dbits, "sbits (%d) < dbits (%d) in downshift", sbits, dbits);
 
     if (sbits>dbits) {
         // see if we need to dither
         dithering = mDithering;
     }
-
+    
     int ireg = d.reg;
     if (!(d.flags & FIRST)) {
         if (s.flags & CORRUPTIBLE)  {
@@ -275,7 +271,7 @@ void GGLAssembler::downshift(
                 if (isValidImmediate(mask) || isValidImmediate(~mask)) {
                     build_and_immediate(ireg, s.reg, mask, 32);
                     sl = offset;
-                    s.reg = ireg;
+                    s.reg = ireg; 
                     sbits = dbits;
                     maskLoBits = maskHiBits = 0;
                 }
@@ -285,7 +281,7 @@ void GGLAssembler::downshift(
             const uint32_t mask = ((1<<sbits)-1) << sl;
             if (isValidImmediate(mask) || isValidImmediate(~mask)) {
                 build_and_immediate(ireg, s.reg, mask, 32);
-                s.reg = ireg;
+                s.reg = ireg; 
                 maskLoBits = maskHiBits = 0;
             }
         }
@@ -329,7 +325,7 @@ void GGLAssembler::downshift(
             MOV(AL, 0, ireg, reg_imm(s.reg, LSR, sl));
             sh -= sl;
             sl = 0;
-            s.reg = ireg;
+            s.reg = ireg; 
         }
         // scaling (V-V>>dbits)
         SUB(AL, 0, ireg, s.reg, reg_imm(s.reg, LSR, dbits));
@@ -337,7 +333,7 @@ void GGLAssembler::downshift(
         if (shift>0)        ADD(AL, 0, ireg, ireg, reg_imm(dither.reg, LSR, shift));
         else if (shift<0)   ADD(AL, 0, ireg, ireg, reg_imm(dither.reg, LSL,-shift));
         else                ADD(AL, 0, ireg, ireg, dither.reg);
-        s.reg = ireg;
+        s.reg = ireg; 
     }
 
     if ((maskLoBits|dithering) && (sh > dbits)) {

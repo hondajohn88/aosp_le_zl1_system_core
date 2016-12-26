@@ -27,7 +27,7 @@
 #include <string>
 #include <vector>
 
-#include "android-base/logging.h"
+#include "base/logging.h"
 
 static const char* TZDATA_FILENAME = "/tzdata";
 // tzdata file header (as much as we need for the version):

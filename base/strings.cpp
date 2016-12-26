@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "android-base/strings.h"
+#include "base/strings.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -79,37 +79,38 @@ std::string Trim(const std::string& s) {
   return s.substr(start_index, end_index - start_index + 1);
 }
 
-// These cases are probably the norm, so we mark them extern in the header to
-// aid compile time and binary size.
-template std::string Join(const std::vector<std::string>&, char);
-template std::string Join(const std::vector<const char*>&, char);
-template std::string Join(const std::vector<std::string>&, const std::string&);
-template std::string Join(const std::vector<const char*>&, const std::string&);
+template <typename StringT>
+std::string Join(const std::vector<StringT>& strings, char separator) {
+  if (strings.empty()) {
+    return "";
+  }
+
+  std::string result(strings[0]);
+  for (size_t i = 1; i < strings.size(); ++i) {
+    result += separator;
+    result += strings[i];
+  }
+  return result;
+}
+
+// Explicit instantiations.
+template std::string Join<std::string>(const std::vector<std::string>& strings,
+                                       char separator);
+template std::string Join<const char*>(const std::vector<const char*>& strings,
+                                       char separator);
 
 bool StartsWith(const std::string& s, const char* prefix) {
-  return strncmp(s.c_str(), prefix, strlen(prefix)) == 0;
+  return s.compare(0, strlen(prefix), prefix) == 0;
 }
 
-bool StartsWithIgnoreCase(const std::string& s, const char* prefix) {
-  return strncasecmp(s.c_str(), prefix, strlen(prefix)) == 0;
-}
-
-static bool EndsWith(const std::string& s, const char* suffix, bool case_sensitive) {
+bool EndsWith(const std::string& s, const char* suffix) {
   size_t suffix_length = strlen(suffix);
   size_t string_length = s.size();
   if (suffix_length > string_length) {
     return false;
   }
   size_t offset = string_length - suffix_length;
-  return (case_sensitive ? strncmp : strncasecmp)(s.c_str() + offset, suffix, suffix_length) == 0;
-}
-
-bool EndsWith(const std::string& s, const char* suffix) {
-  return EndsWith(s, suffix, true);
-}
-
-bool EndsWithIgnoreCase(const std::string& s, const char* suffix) {
-  return EndsWith(s, suffix, false);
+  return s.compare(offset, suffix_length, suffix) == 0;
 }
 
 }  // namespace base

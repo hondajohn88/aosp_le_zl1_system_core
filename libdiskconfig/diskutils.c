@@ -23,10 +23,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/stat.h>
 #include <unistd.h>
+#include <sys/stat.h>
 
-#include <android/log.h>
+#include <log/log.h>
 
 #include <diskconfig/diskconfig.h>
 

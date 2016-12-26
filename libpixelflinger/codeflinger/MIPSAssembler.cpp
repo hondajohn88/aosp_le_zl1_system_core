@@ -52,13 +52,17 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-
-#include <android/log.h>
+#include <cutils/log.h>
 #include <cutils/properties.h>
+
+#if defined(WITH_LIB_HARDWARE)
+#include <hardware_legacy/qemu_tracing.h>
+#endif
+
 #include <private/pixelflinger/ggl_context.h>
 
-#include "CodeCache.h"
 #include "MIPSAssembler.h"
+#include "CodeCache.h"
 #include "mips_disassem.h"
 
 // Choose MIPS arch variant following gcc flags
@@ -1252,12 +1256,6 @@ MIPSAssembler::MIPSAssembler(const sp<Assembly>& assembly, ArmToMipsAssembler *p
     mDuration = ggl_system_time();
 }
 
-MIPSAssembler::MIPSAssembler(void* assembly)
-    : mParent(NULL), mAssembly(NULL)
-{
-    mBase = mPC = (uint32_t *)assembly;
-}
-
 MIPSAssembler::~MIPSAssembler()
 {
 }
@@ -1360,7 +1358,7 @@ void MIPSAssembler::disassemble(const char* name)
         ::mips_disassem(mipsPC, di_buf, arm_disasm_fmt);
         string_detab(di_buf);
         string_pad(di_buf, 30);
-        ALOGW("%08x:    %08x    %s", uintptr_t(mipsPC), uint32_t(*mipsPC), di_buf);
+        ALOGW("%08x:    %08x    %s", uint32_t(mipsPC), uint32_t(*mipsPC), di_buf);
         mipsPC++;
     }
 }
@@ -1406,6 +1404,13 @@ int MIPSAssembler::generate(const char* name)
     const int64_t duration = ggl_system_time() - mDuration;
     const char * const format = "generated %s (%d ins) at [%p:%p] in %lld ns\n";
     ALOGI(format, name, int(pc()-base()), base(), pc(), duration);
+
+#if defined(WITH_LIB_HARDWARE)
+    if (__builtin_expect(mQemuTracing, 0)) {
+        int err = qemu_add_mapping(int(base()), name);
+        mQemuTracing = (err >= 0);
+    }
+#endif
 
     char value[PROPERTY_VALUE_MAX];
     value[0] = '\0';

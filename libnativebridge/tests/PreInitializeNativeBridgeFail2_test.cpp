@@ -14,19 +14,17 @@
  * limitations under the License.
  */
 
+#include "NativeBridgeTest.h"
+
+#include <cstdio>
+#include <cstring>
+#include <cutils/log.h>
 #include <dlfcn.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>
 #include <sys/mount.h>
 #include <sys/stat.h>
-
-#include <cstdio>
-#include <cstring>
-
-#include <android/log.h>
-
-#include "NativeBridgeTest.h"
 
 namespace android {
 

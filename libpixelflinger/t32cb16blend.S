@@ -17,8 +17,7 @@
 
 
 	.text
-	.syntax unified
-	.balign 4
+	.align
 	
 	.global scanline_t32cb16blend_arm
 
@@ -147,7 +146,7 @@ scanline_t32cb16blend_arm:
     tst     r0, #0x3
     beq     aligned
     subs    r2, r2, #1
-    ldmfdlo sp!, {r4-r7, lr}        // return
+    ldmlofd	sp!, {r4-r7, lr}        // return
     bxlo    lr
 
 last:
@@ -198,6 +197,6 @@ aligned:
     mov     r4, r5
 
 9:  adds    r2, r2, #1
-    ldmfdlo sp!, {r4-r7, lr}        // return
+    ldmlofd sp!, {r4-r7, lr}        // return
     bxlo    lr
     b       last
