@@ -104,40 +104,4 @@ class mutex {
 
 }
 
-#elif defined(__BIONIC__)
-
-// On M, the recovery image uses parts of adb that depends on recursive_mutex, and uses libstdc++,
-// which lacks it.
-
-#include <pthread.h>
-#include <mutex>
-
-#include <base/macros.h>
-
-class recursive_mutex {
-  public:
-    recursive_mutex() {
-    }
-
-    ~recursive_mutex() {
-    }
-
-    void lock() {
-        pthread_mutex_lock(&mutex_);
-    }
-
-    bool try_lock() {
-        return pthread_mutex_trylock(&mutex_);
-    }
-
-    void unlock() {
-        pthread_mutex_unlock(&mutex_);
-    }
-
-  private:
-    pthread_mutex_t mutex_ = PTHREAD_RECURSIVE_MUTEX_INITIALIZER_NP;
-
-    DISALLOW_COPY_AND_ASSIGN(recursive_mutex);
-};
-
 #endif

@@ -29,7 +29,11 @@
 extern "C" {
 #endif
 
+#ifdef _WIN32
+typedef uint32_t android_thread_id_t;
+#else
 typedef void* android_thread_id_t;
+#endif
 
 typedef int (*android_thread_func_t)(void*);
 
@@ -56,6 +60,7 @@ enum {
     PRIORITY_AUDIO          = ANDROID_PRIORITY_AUDIO,
     PRIORITY_URGENT_AUDIO   = ANDROID_PRIORITY_URGENT_AUDIO,
     PRIORITY_HIGHEST        = ANDROID_PRIORITY_HIGHEST,
+    PRIORITY_REALTIME       = ANDROID_PRIORITY_REALTIME, // Motorola, IKJBXLINE-9555, rknize2, 05/10/2013
     PRIORITY_DEFAULT        = ANDROID_PRIORITY_DEFAULT,
     PRIORITY_MORE_FAVORABLE = ANDROID_PRIORITY_MORE_FAVORABLE,
     PRIORITY_LESS_FAVORABLE = ANDROID_PRIORITY_LESS_FAVORABLE,

@@ -19,7 +19,7 @@
  * System clock functions.
  */
 
-#ifdef HAVE_ANDROID_OS
+#if defined(__ANDROID__)
 #include <linux/ioctl.h>
 #include <linux/rtc.h>
 #include <utils/Atomic.h>
@@ -29,7 +29,6 @@
 #include <sys/time.h>
 #include <limits.h>
 #include <fcntl.h>
-#include <errno.h>
 #include <string.h>
 
 #include <utils/SystemClock.h>
@@ -39,6 +38,9 @@
 #include <utils/Log.h>
 
 namespace android {
+
+static pthread_mutex_t clock_lock = PTHREAD_MUTEX_INITIALIZER;
+static int clock_method = -1;
 
 /*
  * native public static long uptimeMillis();
@@ -108,7 +110,7 @@ static inline void checkTimeStamps(int64_t timestamp,
  */
 int64_t elapsedRealtimeNano()
 {
-#ifdef HAVE_ANDROID_OS
+#if defined(__ANDROID__)
     struct timespec ts;
     int result;
     int64_t timestamp;
@@ -119,29 +121,47 @@ int64_t elapsedRealtimeNano()
 
     static int s_fd = -1;
 
-    if (s_fd == -1) {
-        int fd = open("/dev/alarm", O_RDONLY);
-        if (android_atomic_cmpxchg(-1, fd, &s_fd)) {
-            close(fd);
+    if (clock_method < 0) {
+        pthread_mutex_lock(&clock_lock);
+    }
+
+    if (clock_method < 0 || clock_method == METHOD_IOCTL) {
+        if (s_fd == -1) {
+            int fd = open("/dev/alarm", O_RDONLY);
+            if (android_atomic_cmpxchg(-1, fd, &s_fd)) {
+                close(fd);
+            }
+        }
+
+        if (s_fd > -1) {
+            result = ioctl(s_fd,
+                    ANDROID_ALARM_GET_TIME(ANDROID_ALARM_ELAPSED_REALTIME), &ts);
+
+            if (result == 0) {
+                timestamp = seconds_to_nanoseconds(ts.tv_sec) + ts.tv_nsec;
+                checkTimeStamps(timestamp, &prevTimestamp, &prevMethod, METHOD_IOCTL);
+                if (clock_method < 0) {
+                    clock_method = METHOD_IOCTL;
+                    pthread_mutex_unlock(&clock_lock);
+                }
+                return timestamp;
+            }
         }
     }
 
-    result = ioctl(s_fd,
-            ANDROID_ALARM_GET_TIME(ANDROID_ALARM_ELAPSED_REALTIME), &ts);
-
-    if (result == 0) {
-        timestamp = seconds_to_nanoseconds(ts.tv_sec) + ts.tv_nsec;
-        checkTimeStamps(timestamp, &prevTimestamp, &prevMethod, METHOD_IOCTL);
-        return timestamp;
-    }
-
     // /dev/alarm doesn't exist, fallback to CLOCK_BOOTTIME
-    result = clock_gettime(CLOCK_BOOTTIME, &ts);
-    if (result == 0) {
-        timestamp = seconds_to_nanoseconds(ts.tv_sec) + ts.tv_nsec;
-        checkTimeStamps(timestamp, &prevTimestamp, &prevMethod,
-                        METHOD_CLOCK_GETTIME);
-        return timestamp;
+    if (clock_method < 0 || clock_method == METHOD_CLOCK_GETTIME) {
+        result = clock_gettime(CLOCK_BOOTTIME, &ts);
+        if (result == 0) {
+            timestamp = seconds_to_nanoseconds(ts.tv_sec) + ts.tv_nsec;
+            checkTimeStamps(timestamp, &prevTimestamp, &prevMethod,
+                            METHOD_CLOCK_GETTIME);
+            if (clock_method < 0) {
+                clock_method = METHOD_CLOCK_GETTIME;
+                pthread_mutex_unlock(&clock_lock);
+            }
+            return timestamp;
+        }
     }
 
     // XXX: there was an error, probably because the driver didn't
@@ -150,6 +170,10 @@ int64_t elapsedRealtimeNano()
     timestamp = systemTime(SYSTEM_TIME_MONOTONIC);
     checkTimeStamps(timestamp, &prevTimestamp, &prevMethod,
                     METHOD_SYSTEMTIME);
+    if (clock_method < 0) {
+        clock_method = METHOD_SYSTEMTIME;
+        pthread_mutex_unlock(&clock_lock);
+    }
     return timestamp;
 #else
     return systemTime(SYSTEM_TIME_MONOTONIC);
