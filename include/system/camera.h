@@ -210,12 +210,7 @@ enum {
     /** The facing of the camera is opposite to that of the screen. */
     CAMERA_FACING_BACK = 0,
     /** The facing of the camera is the same as that of the screen. */
-    CAMERA_FACING_FRONT = 1,
-    /**
-     * The facing of the camera is not fixed relative to the screen.
-     * The cameras with this facing are external cameras, e.g. USB cameras.
-     */
-    CAMERA_FACING_EXTERNAL = 2
+    CAMERA_FACING_FRONT = 1
 };
 
 enum {
@@ -275,8 +270,32 @@ typedef struct camera_face {
      * -2000, -2000 if this is not supported.
      */
     int32_t mouth[2];
+#ifdef QCOM_BSP
+    int32_t smile_degree;
+    int32_t smile_score;
+    int32_t blink_detected;
+    int32_t face_recognised;
+    int32_t gaze_angle;
+    int32_t updown_dir;
+    int32_t leftright_dir;
+    int32_t roll_dir;
+    int32_t left_right_gaze;
+    int32_t top_bottom_gaze;
+    int32_t leye_blink;
+    int32_t reye_blink;
+#endif
 
 } camera_face_t;
+
+/**
+ * The information of a data type received in a camera frame.
+ */
+typedef enum {
+    /** Data buffer */
+    CAMERA_FRAME_DATA_BUF = 0x000,
+    /** File descriptor */
+    CAMERA_FRAME_DATA_FD = 0x100
+} camera_frame_data_type_t;
 
 /**
  * The metadata of the frame data.
